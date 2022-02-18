@@ -49,10 +49,16 @@
 
 
 
+.import __EXRAM_START__, __PRGRAM_START__
+
 ;************************************************************************************
 ;************************************************************************************
 ;
 ; first a whole load of equates
+
+SCREEN_WIDTH = $20
+SCREEN_HEIGHT = $1E
+
 
 LAB_00	= $00			; 6510 I/O port data direction register
 					; bit	default
@@ -745,7 +751,17 @@ LAB_D8	= $D8			; insert count
 ; when a line is the first or only physical line in a logical line. The high bit is reset
 ; to 0 only when a line is an extension to this logical line.
 
-LAB_D9	= $D9			; to LAB_D9 + $18 inclusive, screen line link table
+LAB_D9	= $02A7			; relocated to an unused area with space for more rows
+OLD_LAB_D9= $D9
+
+LAB_DA = $DA ; temp scratch space for Family Keyboard
+LAB_DB = $DB ; more temp scratch space for Family Keyboard
+
+LAB_DC = $DC ; 4kB CHRROM bank selected for background
+
+LAB_DD = $DD ; controller 1 inputs
+LAB_DE = $DE ; controller 2 inputs
+
 
 LAB_F3	= $F3			; colour RAM pointer low byte
 LAB_F4	= $F4			; colour RAM pointer high byte
@@ -1320,12 +1336,12 @@ TK_GO		= $CB			; GO token
 TK_PI		= $FF			; PI token
 
 
-.segment "BASIC"
-
 ;************************************************************************************
 ;
 ; start of the BASIC ROM
 
+;	.ORG	$A000
+.segment "BASIC"
 
 LAB_A000:
 	.word	LAB_E394		; BASIC cold start entry point
@@ -3461,7 +3477,7 @@ LAB_AAE8:
 	TYA				; copy cursor Y
 	SEC				; set carry for subtract
 LAB_AAEE:
-	SBC	#$0A			; subtract one TAB length
+	SBC	#(SCREEN_WIDTH/4)	; subtract one TAB length
 	BCS	LAB_AAEE		; loop if result was +ve
 
 	EOR	#$FF			; complement it
@@ -8286,11 +8302,11 @@ LAB_BFFD:
 	JMP	LAB_E000		; continue EXP()
 
 
-.segment "KERNAL"
-
 ;************************************************************************************
 ;
 ; start of the kernal ROM
+
+.segment "KERNAL"
 
 ; EXP() continued
 
@@ -9207,9 +9223,9 @@ LAB_E460:
 
 LAB_E473:
 	.byte	$93,$0D
-	.byte	"    **** COMMODORE 64 BASIC V2 ****",$0D
+	.byte	"**** COMMODORE 64 BASIC V2 ****",$0D
 	.byte	$0D
-	.byte	" 64K RAM SYSTEM  ",$00
+	.byte	"         64K RAM SYSTEM",$0D,$0D,"     ",$00
 
 
 ;************************************************************************************
@@ -9238,20 +9254,6 @@ LAB_E4B6:
 
 ;************************************************************************************
 ;
-; unused bytes
-
-;LAB_E4B7
-	.byte	$AA,$AA,$AA,$AA	; unused
-	.byte	$AA,$AA,$AA,$AA	; unused
-	.byte	$AA,$AA,$AA,$AA	; unused
-	.byte	$AA,$AA,$AA,$AA	; unused
-	.byte	$AA,$AA,$AA,$AA	; unused
-	.byte	$AA,$AA,$AA,$AA	; unused
-	.byte	$AA,$AA,$AA,$AA	; unused
-
-
-;************************************************************************************
-;
 ; flag the RS232 start bit and set the parity
 
 LAB_E4D3:
@@ -9266,8 +9268,6 @@ LAB_E4D3:
 ; save the current colour to the colour RAM
 
 LAB_E4DA:
-	LDA	LAB_0286		; get the current colour code
-	STA	(LAB_F3),Y		; save it to the colour RAM
 	RTS
 
 
@@ -9303,16 +9303,7 @@ LAB_E4EB:
 ; baud rate tables for PAL C64
 
 LAB_E4EC:
-	.word	$2619			;   50   baud	985300
-	.word	$1944			;   75   baud	985200
-	.word	$111A			;  110   baud	985160
-	.word	$0DE8			;  134.5 baud	984540
-	.word	$0C70			;  150   baud	985200
-	.word	$0606			;  300   baud	985200
-	.word	$02D1			;  600   baud	985200
-	.word	$0137			; 1200   baud	986400
-	.word	$00AE			; 1800   baud	986400
-	.word	$0069			; 2400   baud	984000
+	; DELETED
 
 
 ;************************************************************************************
@@ -9330,8 +9321,8 @@ LAB_E500:
 ; return the x,y organization of the screen
 
 LAB_E505:
-	LDX	#$28			; get the x size
-	LDY	#$19			; get the y size
+	LDX	#SCREEN_WIDTH	; get the x size
+	LDY	#SCREEN_HEIGHT	; get the y size
 	RTS
 
 
@@ -9387,20 +9378,24 @@ LAB_E544:
 	LDA	#$00			; clear the line start low byte
 	TAX				; clear the index
 LAB_E54D:
-	STY	LAB_D9,X		; save the start of line X pointer high byte
+	; TODO: Figure out why I was storing and retrieving OLD_LAB_D9; this may be a bug.
+	STA OLD_LAB_D9
+	TYA
+	STA	LAB_D9,X		; save the start of line X pointer high byte
+	LDA OLD_LAB_D9
 	CLC				; clear carry for add
-	ADC	#$28			; add the line length to the low byte
+	ADC	#SCREEN_WIDTH	; add the line length to the low byte
 	BCC	LAB_E555		; if no rollover skip the high byte increment
 
 	INY				; else increment the high byte
 LAB_E555:
 	INX				; increment the line index
-	CPX	#$1A			; compare it with the number of lines + 1
+	CPX	#(SCREEN_HEIGHT+1)			; compare it with the number of lines + 1
 	BNE	LAB_E54D		; loop if not all done
 
 	LDA	#$FF			; set the end of table marker
 	STA	LAB_D9,X		; mark the end of the table
-	LDX	#$18			; set the line count, 25 lines to do, 0 to 24
+	LDX	#(SCREEN_HEIGHT-1)	; set the line count, 25 lines to do, 0 to 24
 LAB_E560:
 	JSR	LAB_E9FF		; clear screen line X
 	DEX				; decrement the count
@@ -9429,21 +9424,21 @@ LAB_E570:
 	BMI	LAB_E57C		; if it is the logical line start continue
 
 	CLC				; else clear carry for add
-	ADC	#$28			; add one line length
+	ADC	#SCREEN_WIDTH	; add one line length
 	STA	LAB_D3		; save the cursor column
 	DEX				; decrement the cursor row
 	BPL	LAB_E570		; loop, branch always
 
 LAB_E57C:
 	JSR	LAB_E9F0		; fetch a screen address
-	LDA	#$27			; set the line length
+	LDA	#(SCREEN_WIDTH-1)			; set the line length
 	INX				; increment the cursor row
 LAB_E582:
 	LDY	LAB_D9,X		; get the start of line X pointer high byte
 	BMI	LAB_E58C		; if logical line start exit
 
 	CLC				; else clear carry for add
-	ADC	#$28			; add one line length to the current line length
+	ADC	#SCREEN_WIDTH	; add one line length to the current line length
 	INX				; increment the cursor row
 	BPL	LAB_E582		; loop, branch always
 
@@ -9568,6 +9563,11 @@ LAB_E5FE:
 	LDY	LAB_D5		; get the current screen line length
 	STY	LAB_D0		; input from keyboard or screen, $xx = screen,
 					; $00 = keyboard
+
+	; make nametable visible to CPU
+    LDA     #$02
+    STA     $5104
+
 LAB_E606:
 	LDA	(LAB_D1),Y		; get the character from the current screen line
 	CMP	#' '			; compare it with [SPACE]
@@ -9577,6 +9577,10 @@ LAB_E606:
 	BNE	LAB_E606		; loop, branch always
 
 LAB_E60F:
+	; make nametable visible to PPU
+    LDA     #$00
+    STA     $5104
+
 	INY				; increment past the last non space character on line
 	STY	LAB_C8		; save the input [EOL] pointer
 	LDY	#$00			; clear A
@@ -9614,8 +9618,20 @@ LAB_E632:
 
 LAB_E63A:
 	LDY	LAB_D3		; get the cursor column
+
+	; make nametable visible to CPU
+    LDA     #$02
+    STA     $5104
+
 	LDA	(LAB_D1),Y		; get character from the current screen line
 	STA	LAB_D7		; save temporary last character
+
+	; make nametable visible to PPU
+    LDA     #$00
+    STA     $5104
+
+	LDA LAB_D7
+
 	AND	#$3F			; mask key bits
 	ASL	LAB_D7		; << temporary last character
 	BIT	LAB_D7		; test it
@@ -9741,7 +9757,8 @@ LAB_E6B6:
 	CMP	LAB_D3		; compare ?? with the cursor column
 	BCS	LAB_E700		; exit if line length >= cursor column
 
-	CMP	#$4F			; compare with max length
+	; TODO: Figure out if it should be #$4f, like it originally was
+	CMP	#(SCREEN_WIDTH-1)	; compare with max length
 	BEQ	LAB_E6F7		; if at max clear column, back cursor up and do newline
 
 	LDA	LAB_0292		; get the autoscroll flag
@@ -9751,7 +9768,8 @@ LAB_E6B6:
 
 LAB_E6CD:
 	LDX	LAB_D6		; get the cursor row
-	CPX	#$19			; compare with max + 1
+	; NOTE: Comment says "max + 1", but original value was #$19, the original SCREEN_HEIGHT
+	CPX	#SCREEN_HEIGHT			; compare with max + 1
 	BCC	LAB_E6DA		; if less than max + 1 go add this row to the current
 					; logical line
 
@@ -9778,7 +9796,7 @@ LAB_E6DA:
 ; add one line length and set the pointers for the start of the line
 
 	CLC				; clear carry for add
-	ADC	#$28			; add one line length
+	ADC	#SCREEN_WIDTH	; add one line length
 	STA	LAB_D5		; save current screen line length
 LAB_E6ED:
 	LDA	LAB_D9,X		; get start of line X pointer high byte
@@ -9888,24 +9906,27 @@ LAB_E759:
 	DEY				; decrement index to previous character
 	STY	LAB_D3		; save the cursor column
 	JSR	LAB_EA24		; calculate the pointer to colour RAM
+
+	; make nametable visible to CPU
+    LDA     #$02
+    STA     $5104
+
 LAB_E762:
 	INY				; increment index to next character
 	LDA	(LAB_D1),Y		; get character from current screen line
 	DEY				; decrement index to previous character
 	STA	(LAB_D1),Y		; save character to current screen line
 	INY				; increment index to next character
-	LDA	(LAB_F3),Y		; get colour RAM byte
-	DEY				; decrement index to previous character
-	STA	(LAB_F3),Y		; save colour RAM byte
-	INY				; increment index to next character
 	CPY	LAB_D5		; compare with current screen line length
 	BNE	LAB_E762		; loop if not there yet
 
 LAB_E773:
+	; make nametable visible to PPU
+    LDA     #$02
+    STA     $5104
+
 	LDA	#' '			; set [SPACE]
 	STA	(LAB_D1),Y		; clear last character on current screen line
-	LDA	LAB_0286		; get the current colour code
-	STA	(LAB_F3),Y		; save to colour RAM
 	BPL	LAB_E7CB		; branch always
 
 LAB_E77E:
@@ -9951,7 +9972,7 @@ LAB_E7AD:
 
 	CLC				; clear carry for add
 	TYA				; copy the cursor column
-	ADC	#$28			; add one line
+	ADC	#SCREEN_WIDTH			; add one line
 	TAY				; copy back to Y
 	INC	LAB_D6		; increment the cursor row
 	CMP	LAB_D5		; compare cursor column with current screen line length
@@ -9963,7 +9984,7 @@ LAB_E7AD:
 					; so back it up until it's on the start of the logical line
 	DEC	LAB_D6		; decrement the cursor row
 LAB_E7C0:
-	SBC	#$28			; subtract one line
+	SBC	#SCREEN_WIDTH	; subtract one line
 	BCC	LAB_E7C8		; if on previous line exit the loop
 
 	STA	LAB_D3		; else save the cursor column
@@ -10005,7 +10026,19 @@ LAB_E7EA:
 	BNE	LAB_E829		; if not [INSERT DELETE] go ??
 
 	LDY	LAB_D5		; get current screen line length
+
+	; make nametable visible to CPU
+    LDA     #$02
+    STA     $5104
+
 	LDA	(LAB_D1),Y		; get character from current screen line
+	PHA
+
+	; make nametable visible to PPU
+    LDA     #$00
+    STA     $5104
+
+	PLA
 	CMP	#' '			; compare the character with [SPACE]
 	BNE	LAB_E7FE		; if not [SPACE] continue
 
@@ -10020,24 +10053,25 @@ LAB_E7FE:
 					; now open up space on the line to insert a character
 LAB_E805:
 	LDY	LAB_D5		; get current screen line length
-	JSR	LAB_EA24		; calculate the pointer to colour RAM
+
+	; make nametable visible to CPU
+    LDA     #$02
+    STA     $5104
 LAB_E80A:
 	DEY				; decrement the index to previous character
 	LDA	(LAB_D1),Y		; get the character from the current screen line
 	INY				; increment the index to next character
 	STA	(LAB_D1),Y		; save the character to the current screen line
-	DEY				; decrement the index to previous character
-	LDA	(LAB_F3),Y		; get the current screen line colour RAM byte
-	INY				; increment the index to next character
-	STA	(LAB_F3),Y		; save the current screen line colour RAM byte
 	DEY				; decrement the index to the previous character
 	CPY	LAB_D3		; compare the index with the cursor column
 	BNE	LAB_E80A		; loop if not there yet
 
+	; make nametable visible to PPU
+    LDA     #$00
+    STA     $5104
+
 	LDA	#' '			; set [SPACE]
 	STA	(LAB_D1),Y		; clear character at cursor position on current screen line
-	LDA	LAB_0286		; get current colour code
-	STA	(LAB_F3),Y		; save to cursor position on current screen line colour RAM
 	INC	LAB_D8		; increment insert count
 LAB_E826:
 	JMP	LAB_E6A8		; restore the registers, set the quote flag and exit
@@ -10061,7 +10095,7 @@ LAB_E832:
 	DEC	LAB_D6		; decrement the cursor row
 	LDA	LAB_D3		; get the cursor column
 	SEC				; set carry for subtract
-	SBC	#$28			; subtract one line length
+	SBC	#SCREEN_WIDTH	; subtract one line length
 	BCC	LAB_E847		; branch if stepped back to previous line
 
 	STA	LAB_D3		; else save the cursor column ..
@@ -10118,7 +10152,7 @@ LAB_E87C:
 	LDX	LAB_D6		; get the cursor row
 LAB_E880:
 	INX				; increment the row
-	CPX	#$19			; compare it with last row + 1
+	CPX	#(SCREEN_HEIGHT)			; compare it with last row + 1
 	BNE	LAB_E888		; if not last row + 1 skip the screen scroll
 
 	JSR	LAB_E8EA		; else scroll the screen
@@ -10157,7 +10191,7 @@ LAB_E8A5:
 					; and exit
 
 	CLC				; else clear carry for add
-	ADC	#$28			; increment to next line
+	ADC	#SCREEN_WIDTH			; increment to next line
 	DEX				; decrement loop count
 	BNE	LAB_E8A5		; loop if more to test
 
@@ -10176,13 +10210,13 @@ LAB_E8B0:
 
 LAB_E8B3:
 	LDX	#$02			; set the count
-	LDA	#$27			; set the column
+	LDA	#(SCREEN_WIDTH-1)			; set the column
 LAB_E8B7:
 	CMP	LAB_D3		; compare the column with the cursor column
 	BEQ	LAB_E8C2		; if at end of line test and possibly increment cursor row
 
 	CLC				; else clear carry for add
-	ADC	#$28			; increment to the next line
+	ADC	#SCREEN_WIDTH	; increment to the next line
 	DEX				; decrement the loop count
 	BNE	LAB_E8B7		; loop if more to test
 
@@ -10191,7 +10225,7 @@ LAB_E8B7:
 					; cursor is at end of line
 LAB_E8C2:
 	LDX	LAB_D6		; get the cursor row
-	CPX	#$19			; compare it with the end of the screen
+	CPX	#SCREEN_HEIGHT			; compare it with the end of the screen
 	BEQ	LAB_E8CA		; if at the end of screen just exit
 
 	INC	LAB_D6		; else increment the cursor row
@@ -10266,7 +10300,7 @@ LAB_E8F6:
 LAB_E8FF:
 	INX				; increment the line number
 	JSR	LAB_E9F0		; fetch a screen address, set the start of line X
-	CPX	#$18			; compare with last line
+	CPX	#(SCREEN_HEIGHT-1)	; compare with last line
 	BCS	LAB_E913		; branch if >= $16
 
 	LDA	LAB_ECF0+1,X	; get the start of the next line pointer low byte
@@ -10290,7 +10324,7 @@ LAB_E918:
 LAB_E922:
 	STA	LAB_D9,X		; set start of line X pointer high byte
 	INX				; increment line number
-	CPX	#$18			; compare with last line
+	CPX	#(SCREEN_HEIGHT-1)			; compare with last line
 	BNE	LAB_E918		; loop if not last line
 
 	LDA	LAB_D9+$18		; get start of last line pointer high byte
@@ -10352,7 +10386,7 @@ LAB_E967:
 	BPL	LAB_E967		; loop if not start of logical line
 
 	STX	LAB_02A5		; save the screen row marker
-	CPX	#$18			; compare it with the last line
+	CPX	#(SCREEN_HEIGHT-1)	; compare it with the last line
 	BEQ	LAB_E981		; if = last line go ??
 
 	BCC	LAB_E981		; if < last line go ??
@@ -10373,7 +10407,7 @@ LAB_E981:
 	PHA				; save it
 	LDA	LAB_AF		; copy tape buffer end pointer
 	PHA				; save it
-	LDX	#$19			; set to end line + 1 for predecrement loop
+	LDX	#SCREEN_HEIGHT			; set to end line + 1 for predecrement loop
 LAB_E98F:
 	DEX				; decrement the line number
 	JSR	LAB_E9F0		; fetch a screen address
@@ -10391,6 +10425,7 @@ LAB_E98F:
 
 LAB_E9A6:
 	JSR	LAB_E9FF		; clear screen line X
+	; TODO: See if this should be SCREEN_HEIGHT-2
 	LDX	#$17			;.
 LAB_E9AB:
 	CPX	LAB_02A5		; compare it with the screen row marker
@@ -10422,12 +10457,10 @@ LAB_E9C8:
 	ORA	LAB_0288		; OR with screen memory page
 	STA	LAB_AD		; save next/previous line pointer high byte
 	JSR	LAB_E9E0		; calculate pointers to screen lines colour RAM
-	LDY	#$27			; set the column count
+	LDY	#(SCREEN_WIDTH-1)			; set the column count
 LAB_E9D4:
 	LDA	(LAB_AC),Y		; get character from next/previous screen line
 	STA	(LAB_D1),Y		; save character to current screen line
-	LDA	(LAB_AE),Y		; get colour from next/previous screen line colour RAM
-	STA	(LAB_F3),Y		; save colour to current screen line colour RAM
 	DEY				; decrement column index/count
 	BPL	LAB_E9D4		; loop if more to do
 
@@ -10469,7 +10502,7 @@ LAB_E9F0:
 ; clear screen line X
 
 LAB_E9FF:
-	LDY	#$27			; set number of columns to clear
+	LDY	#(SCREEN_WIDTH-1)			; set number of columns to clear
 	JSR	LAB_E9F0		; fetch a screen address
 	JSR	LAB_EA24		; calculate the pointer to colour RAM
 LAB_EA07:
@@ -10509,8 +10542,6 @@ LAB_EA13:
 LAB_EA1C:
 	LDY	LAB_D3		; get the cursor column
 	STA	(LAB_D1),Y		; save the character from current screen line
-	TXA				; copy the colour to A
-	STA	(LAB_F3),Y		; save to colour RAM
 	RTS
 
 
@@ -10519,12 +10550,6 @@ LAB_EA1C:
 ; calculate the pointer to colour RAM
 
 LAB_EA24:
-	LDA	LAB_D1		; get current screen line pointer low byte
-	STA	LAB_F3		; save pointer to colour RAM low byte
-	LDA	LAB_D2		; get current screen line pointer high byte
-	AND	#$03			; mask 0000 00xx, line memory page
-	ORA	#>LAB_D800		; set  1101 01xx, colour memory page
-	STA	LAB_F4		; save pointer to colour RAM high byte
 	RTS
 
 
@@ -10545,15 +10570,24 @@ LAB_EA31:
 	LDY	LAB_D3		; get the cursor column
 	LSR	LAB_CF		; shift b0 cursor blink phase into carry
 	LDX	LAB_0287		; get the colour under the cursor
+
+	; enable reading from the screen
+	LDA     #$02
+    STA     $5104
+
 	LDA	(LAB_D1),Y		; get the character from current screen line
+	PHA
+
+	; disable reading from the screen
+	LDA     #$00
+    STA     $5104
+
+	PLA
+
 	BCS	LAB_EA5C		; branch if cursor phase b0 was 1
 
 	INC	LAB_CF		; set the cursor blink phase to 1
 	STA	LAB_CE		; save the character under the cursor
-	JSR	LAB_EA24		; calculate the pointer to colour RAM
-	LDA	(LAB_F3),Y		; get the colour RAM byte
-	STA	LAB_0287		; save the colour under the cursor
-	LDX	LAB_0286		; get the current colour code
 	LDA	LAB_CE		; get the character under the cursor
 LAB_EA5C:
 	EOR	#$80			; toggle b7 of character under cursor
@@ -10581,7 +10615,7 @@ LAB_EA71:
 LAB_EA79:
 	STA	LAB_01		; save the 6510 I/O port
 LAB_EA7B:
-	JSR	LAB_EA87		; scan the keyboard
+	JSR	LAB_EA87		; scan the keyboard and controllers
 	LDA	LAB_DC0D		; read VIA 1 ICR, clear the timer interrupt flag
 	PLA				; pull Y
 	TAY				; restore Y
@@ -10616,75 +10650,144 @@ LAB_EA7B:
 
 ; scan the keyboard
 
+JOYPAD1 = $4016
+JOYPAD2 = $4017
+
 LAB_EA87:
+	; Controller code based on https://wiki.nesdev.org/w/index.php?title=Controller_reading_code
+    LDA #$01
+    STA JOYPAD1
+    STA LAB_DE  ; player 2's buttons double as a ring counter
+    LSR a         ; now A is 0
+    STA JOYPAD1
+@joy_loop:
+    LDA JOYPAD1
+	LSR a
+    ROL LAB_DD    ; Carry -> bit 0; bit 7 -> Carry
+    LDA JOYPAD2     ; Repeat
+	LSR a
+    ROL LAB_DE    ; Carry -> bit 0; bit 7 -> Carry
+    BCC @joy_loop
+
+	; Read from keyboard:
+
 	LDA	#$00			; clear A
 	STA	LAB_028D		; clear the keyboard shift/control/c= flag
-	LDY	#$40			; set no key
-	STY	LAB_CB		; save which key
-	STA	LAB_DC00		; clear VIA 1 DRA, keyboard column drive
-	LDX	LAB_DC01		; read VIA 1 DRB, keyboard row port
-	CPX	#$FF			; compare with all bits set
-	BEQ	LAB_EAFB		; if no key pressed clear current key and exit (does
-					; further BEQ to LAB_EBBA)
-
+	LDY	#(keyboard_mapping_size - 1) ; set no key ; maybe unnecessary
+	STY	LAB_CB		; save which key ; maybe unnecessary
 	TAY				; clear the key count
-	LDA	#<LAB_EB81		; get the decode table low byte
+	LDA	#<standard_keyboard_mapping		; get the decode table low byte
 	STA	LAB_F5		; save the keyboard pointer low byte
-	LDA	#>LAB_EB81		; get the decode table high byte
+	LDA	#>standard_keyboard_mapping		; get the decode table high byte
 	STA	LAB_F6		; save the keyboard pointer high byte
-	LDA	#$FE			; set column 0 low
-	STA	LAB_DC00		; save VIA 1 DRA, keyboard column drive
-LAB_EAA8:
-	LDX	#$08			; set the row count
-	PHA				; save the column
-LAB_EAAB:
-	LDA	LAB_DC01		; read VIA 1 DRB, keyboard row port
-	CMP	LAB_DC01		; compare it with itself
-	BNE	LAB_EAAB		; loop if changing
 
-LAB_EAB3:
-	LSR				; shift row to Cb
-	BCS	LAB_EACC		; if no key closed on this row go do next row
+	LDA #$05	; reset code
+	STA $4016   ; reset keyboard scan to row 0, column 0
+key_row_scan_loop:
+	LDX	#$08	; set the column count
+    LDA #$04   ; "next row" code
+	STA $4016  ; select column 0, next row if not just reset
+	TXA
+	LDX #$10
+@wait_for_row:
+	DEX
+	BNE @wait_for_row
+	TAX
 
-	PHA				; save row
+	LDA $4017  ; read column 0 data
+
+	; do stuff with col 0
+	LSR A; slide it to the right to knock off bit 0 (a "don't care")
+	AND #$0f ; knock off bits we don't care about
+	STA LAB_DA ; store in temp space for now
+
+	LDA #$06   ; "next column" code
+	STA $4016  ; select column 1
+	LDA $4017  ; read column 1 data
+
+	; do stuff with col 1
+	ASL a
+	ASL a
+	ASL a
+	AND #$f0 ; knock off bits we don't care about
+	ORA LAB_DA ; join it with the bits from col 0
+
+column_scan_loop:
+	LSR
+	BCS done_with_column ; key is 1, so not pressed
+
+	STA LAB_DA+1				; save row
 	LDA	(LAB_F5),Y		; get character from decode table
 	CMP	#$05			; compare with $05, there is no $05 key but the control
 					; keys are all less than $05
-	BCS	LAB_EAC9		; if not shift/control/c=/stop go save key count
+	BCS	save_key_count		; if not shift/control/c=/stop go save key count
 
 					; else was shift/control/c=/stop key
 	CMP	#$03			; compare with $03, stop
-	BEQ	LAB_EAC9		; if stop go save key count and continue
+	BEQ	save_key_count		; if stop go save key count and continue
 
 					; character is $01 - shift, $02 - c= or $04 - control
 	ORA	LAB_028D		; OR it with the keyboard shift/control/c= flag
 	STA	LAB_028D		; save the keyboard shift/control/c= flag
-	BPL	LAB_EACB		; skip save key, branch always
+	BPL	restore_row		; skip save key, branch always
 
-LAB_EAC9:
+save_key_count:
 	STY	LAB_CB		; save key count
-LAB_EACB:
-	PLA				; restore row
-LAB_EACC:
+restore_row:
+	LDA LAB_DA+1		; restore row
+
+done_with_column:
 	INY				; increment key count
-	CPY	#$41			; compare with max+1
-	BCS	LAB_EADC		; exit loop if >= max+1
+	CPY	#keyboard_mapping_size	; compare with max+1
+	BCS	done_with_scans		; exit loop if >= max+1
 
-					; else still in matrix
-	DEX				; decrement row count
-	BNE	LAB_EAB3		; loop if more rows to do
+	DEX ; decrement column count
+	BNE column_scan_loop
 
-	SEC				; set carry for keyboard column shift
-	PLA				; restore the column
-	ROL				; shift the keyboard column
-	STA	LAB_DC00		; save VIA 1 DRA, keyboard column drive
-	BNE	LAB_EAA8		; loop for next column, branch always
+	SEC
+	BCS key_row_scan_loop
 
-LAB_EADC:
-	PLA				; dump the saved column
+
+done_with_scans:
 	JMP	(LAB_028F)		; evaluate the SHIFT/CTRL/C= keys, LAB_EBDC
 
 ; key decoding continues here after the SHIFT/CTRL/C= keys are evaluated
+
+F1=$85
+F2=$89
+F3=$86
+F4=$8A
+F5=$87
+F6=$8B
+F7=$88
+F8=$8C
+
+GBP=$5c		; the British currency symbol; same code as ASCII backslash
+LEFT_ARROW='_'  ; An arrow pointing left, not a cursor movement key
+
+; Control code keys
+SHIFT=$01
+COMMODORE_KEY=$02
+STOP=$03
+CTRL=$04
+RETURN=$0D
+DOWN=$11
+HOME=$13
+DELETE=$14
+RIGHT=$1D
+RUN=$83
+UP=$91
+CLEAR=$93
+LEFT=$9D
+INSERT=$94
+
+; These are Famicom keyboard keys with no Commodore equivalent
+ESC=COMMODORE_KEY
+KANA=STOP
+GRPH=STOP
+
+
+NO_KEY=$ff ; Equivalent to no key pressed
 
 LAB_EAE0:
 	LDY	LAB_CB		; get saved key count
@@ -10704,7 +10807,7 @@ LAB_EAF0:
 
 	BVS	LAB_EB42		; if repeat none go ??
 
-	CMP	#$7F			; compare with end marker
+	CMP	#(NO_KEY & $7f)	; compare with end marker
 LAB_EAFB:
 	BEQ	LAB_EB26		; if $00/end marker go save key to buffer and exit
 
@@ -10714,10 +10817,10 @@ LAB_EAFB:
 	CMP	#' '			; compare with [SPACE]
 	BEQ	LAB_EB0D		; if [SPACE] go test for repeat
 
-	CMP	#$1D			; compare with [CURSOR RIGHT]
+	CMP	#RIGHT			; compare with [CURSOR RIGHT]
 	BEQ	LAB_EB0D		; if [CURSOR RIGHT] go test for repeat
 
-	CMP	#$11			; compare with [CURSOR DOWN]
+	CMP	#DOWN			; compare with [CURSOR DOWN]
 	BNE	LAB_EB42		; if not [CURSOR DOWN] just exit
 
 					; was one of the cursor movement keys, insert/delete
@@ -10750,7 +10853,7 @@ LAB_EB26:
 	STY	LAB_C5		; save it as the current key count
 	LDY	LAB_028D		; get the keyboard shift/control/c= flag
 	STY	LAB_028E		; save it as last keyboard shift pattern
-	CPX	#$FF			; compare the character with the table end marker or no key
+	CPX	#NO_KEY			; compare the character with the table end marker or no key
 	BEQ	LAB_EB42		; if it was the table end marker or no key just exit
 
 	TXA				; copy the character to A
@@ -10783,9 +10886,10 @@ LAB_EB48:
 	BMI	LAB_EB76		; if locked continue keyboard decode
 
 					; toggle text mode
-	LDA	LAB_D018		; get the start of character memory address
-	EOR	#$02			; toggle address b1
-	STA	LAB_D018		; save the start of character memory address
+	LDA LAB_DC
+	EOR	#$01			; toggle b0
+	STA	LAB_DC			; save new bank number for CHRROM
+	STA $5123           ; change bank
 	JMP	LAB_EB76		; continue the keyboard decode
 
 ; select keyboard table
@@ -10809,54 +10913,69 @@ LAB_EB76:
 ;************************************************************************************
 ;
 ; table addresses
-
+; TODO: Make proper tables for control and commodore key.
+;       For now, we treat the control key like the shift key to work around an
+;		apparent bug in FCEUX, where shift + numbers/symbols will not register as a
+;		key press
 LAB_EB79:
-	.word	LAB_EB81		; standard
-	.word	LAB_EBC2		; shift
-	.word	LAB_EC03		; commodore
-	.word	LAB_EC78		; control
+	.word	standard_keyboard_mapping		; standard
+	.word	shifted_keyboard_mapping		; shift
+	.word	commodore_key_keyboard_mapping	; commodore
+	.word	shifted_keyboard_mapping		; control
 
 
 ;************************************************************************************
 ;
-; standard keyboard table
 
-LAB_EB81:
-	.byte	$14,$0D,$1D,$88,$85,$86,$87,$11
-	.byte	$33,$57,$41,$34,$5A,$53,$45,$01
-	.byte	$35,$52,$44,$36,$43,$46,$54,$58
-	.byte	$37,$59,$47,$38,$42,$48,$55,$56
-	.byte	$39,$49,$4A,$30,$4D,$4B,$4F,$4E
-	.byte	$2B,$50,$4C,$2D,$2E,$3A,$40,$2C
-	.byte	$5C,$2A,$3B,$13,$01,$3D,$5E,$2F
-	.byte	$31,$5F,$04,$32,$20,$02,$51,$03
-	.byte	$FF
+; standard keyboard table
+standard_keyboard_mapping:
+	.byte	F8,RETURN,'[',']',KANA,SHIFT,GBP,STOP
+	.byte	F7,'@',':',';',LEFT_ARROW,'/','-','^'
+	.byte	F6,'O','L','K','.',',','P','0'
+	.byte	F5,'I','U','J','M','N','9','8'
+	.byte	F4,'Y','G','H','B','V','7','6'
+	.byte	F3,'T','R','D','F','C','5','4'
+	.byte	F2,'W','S','A','X','Z','E','3'
+	.byte	F1,ESC,'Q',CTRL,SHIFT,GRPH,'1','2'
+	.byte   HOME,UP,RIGHT,LEFT,DOWN,' ',DELETE,INSERT
+	.byte	NO_KEY
+end_keyboard_mapping:
+
+keyboard_mapping_size = end_keyboard_mapping - standard_keyboard_mapping
 
 ; shifted keyboard table
 
-LAB_EBC2:
-	.byte	$94,$8D,$9D,$8C,$89,$8A,$8B,$91
-	.byte	$23,$D7,$C1,$24,$DA,$D3,$C5,$01
-	.byte	$25,$D2,$C4,$26,$C3,$C6,$D4,$D8
-	.byte	$27,$D9,$C7,$28,$C2,$C8,$D5,$D6
-	.byte	$29,$C9,$CA,$30,$CD,$CB,$CF,$CE
-	.byte	$DB,$D0,$CC,$DD,$3E,$5B,$BA,$3C
-	.byte	$A9,$C0,$5D,$93,$01,$3D,$DE,$3F
-	.byte	$21,$5F,$04,$22,$A0,$02,$D1,$83
-	.byte	$FF
+; TODO: Figure out why the original matrix defined shifted letter
+; characters by ORing the unshifted ones with $80.
+; (e.g, 'A' was $41 unshifted / $C1 shifted)
+; Defining the shifted 'A' as 'a' ($61) also seems to work, and is more readable.
 
-; CBM key keyboard table
+shifted_keyboard_mapping:
+	.byte	F8,$8D,'[',']',KANA,SHIFT,GBP,RUN
+	.byte	F7,'@','*','+',LEFT_ARROW,'?','=','^'
+	.byte	F6,'o','l','k','>','<','p','0'
+	.byte	F5,'i','u','j','m','n',')','('
+	.byte	F4,'y','g','h','b','v',"'",'&'
+	.byte	F3,'t','r','d','f','c','%','$'
+	.byte	F2,'w','s','a','x','z','e','#'
+	.byte	F1,ESC,'q',CTRL,SHIFT,GRPH,'!','"'
+	.byte   CLEAR,UP,RIGHT,LEFT,DOWN,$A0,DELETE,INSERT
+	.byte	NO_KEY
 
-LAB_EC03:
-	.byte	$94,$8D,$9D,$8C,$89,$8A,$8B,$91
-	.byte	$96,$B3,$B0,$97,$AD,$AE,$B1,$01
-	.byte	$98,$B2,$AC,$99,$BC,$BB,$A3,$BD
-	.byte	$9A,$B7,$A5,$9B,$BF,$B4,$B8,$BE
-	.byte	$29,$A2,$B5,$30,$A7,$A1,$B9,$AA
-	.byte	$A6,$AF,$B6,$DC,$3E,$5B,$A4,$3C
-	.byte	$A8,$DF,$5D,$93,$01,$3D,$DE,$3F
-	.byte	$81,$5F,$04,$95,$A0,$02,$AB,$83
-	.byte	$FF
+; Since there are no separate keys on the Famicom keyboard for '*' and '+',
+; I've mapped C= + ':' and ';' to their respective key combos
+
+commodore_key_keyboard_mapping:
+	.byte	F8,$8D,'[',']',KANA,SHIFT,$A8,RUN
+	.byte	F7,$A4,$DF,$A6,LEFT_ARROW,'?',$DC,$DE
+	.byte	F6,$B9,$B6,$A1,'>','<',$AF,'0'
+	.byte	F5,$A2,$B8,$B5,$A7,$AA,')',$9B
+	.byte	F4,$B7,$A5,$B4,$BF,$BE,$9A,$99
+	.byte	F3,$A3,$B2,$AC,$BB,$BC,$98,$97
+	.byte	F2,$B3,$AE,$B0,$BD,$AD,$B1,$96
+	.byte	F1,ESC,$AB,CTRL,SHIFT,GRPH,$81,$95
+	.byte   CLEAR,UP,RIGHT,LEFT,DOWN,$A0,DELETE,INSERT
+	.byte	NO_KEY
 
 
 ;************************************************************************************
@@ -10871,7 +10990,7 @@ LAB_EC44:
 	ORA	#$02			; mask xxxx xx1x, set lower case characters
 	BNE	LAB_EC58		; go save the new value, branch always
 
-; check for special character codes except fro switch to lower case
+; check for special character codes except for switch to lower case
 
 LAB_EC4F:
 	CMP	#$8E			; compare with [SWITCH TO UPPER CASE]
@@ -10904,23 +11023,6 @@ LAB_EC69:
 LAB_EC72:
 	STA	LAB_0291		; save the shift mode switch $00 = enabled, $80 = locked
 	JMP	LAB_E6A8		; restore the registers, set the quote flag and exit
-
-
-;************************************************************************************
-;
-; control keyboard table
-
-LAB_EC78:
-	.byte	$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
-	.byte	$1C,$17,$01,$9F,$1A,$13,$05,$FF
-	.byte	$9C,$12,$04,$1E,$03,$06,$14,$18
-	.byte	$1F,$19,$07,$9E,$02,$08,$15,$16
-	.byte	$12,$09,$0A,$92,$0D,$0B,$0F,$0E
-	.byte	$FF,$10,$0C,$FF,$FF,$1B,$00,$FF
-	.byte	$1C,$FF,$1D,$FF,$FF,$1F,$1E,$FF
-	.byte	$90,$06,$FF,$05,$FF,$FF,$11,$FF
-	.byte	$FF
-
 
 ;************************************************************************************
 ;
@@ -11020,12 +11122,9 @@ LAB_ECE7:
 ; low bytes of screen line addresses
 
 LAB_ECF0:
-	.byte	$00,$28,$50,$78,$A0
-	.byte	$C8,$F0,$18,$40,$68
-	.byte	$90,$B8,$E0,$08,$30
-	.byte	$58,$80,$A8,$D0,$F8
-	.byte	$20,$48,$70,$98,$C0
-
+.repeat SCREEN_HEIGHT, line_num
+	.byte <(SCREEN_WIDTH * line_num)
+.endrep
 
 ;************************************************************************************
 ;
@@ -11689,12 +11788,6 @@ LAB_EF70:
 ; setup to receive an RS232 bit
 
 LAB_EF7E:
-	LDA	#$90			; enable FLAG interrupt
-	STA	LAB_DD0D		; save VIA 2 ICR
-	ORA	LAB_02A1		; OR with the RS-232 interrupt enable byte
-	STA	LAB_02A1		; save the RS-232 interrupt enable byte
-	STA	LAB_A9		; set start bit check flag, set no start bit received
-	LDA	#$02			; disable timer B interrupt
 	JMP	LAB_EF3B		; set VIA 2 ICR from A and return
 
 
@@ -11843,21 +11936,6 @@ LAB_F017:
 ; setup for RS232 transmit
 
 LAB_F028:
-	LDA	LAB_02A1		; get the RS-232 interrupt enable byte
-	LSR				; shift the enable bit to Cb
-	BCS	LAB_F04C		; if interrupts are enabled just exit
-
-	LDA	#$10			; start timer A
-	STA	LAB_DD0E		; save VIA 2 CRA
-	LDA	LAB_0299		; get the baud rate bit time low byte
-	STA	LAB_DD04		; save VIA 2 timer A low byte
-	LDA	LAB_029A		; get the baud rate bit time high byte
-	STA	LAB_DD05		; save VIA 2 timer A high byte
-	LDA	#$81			; enable timer A interrupt
-	JSR	LAB_EF3B		; set VIA 2 ICR from A
-	JSR	LAB_EF06		; setup next RS232 Tx byte
-	LDA	#$11			; load timer A, start timer A
-	STA	LAB_DD0E		; save VIA 2 CRA
 LAB_F04C:
 	RTS
 
@@ -12068,13 +12146,7 @@ LAB_F166:
 ; the input device was not the screen
 
 LAB_F173:
-	BCS	LAB_F1AD		; if input device > screen go do IEC devices
-
-; the input device was < screen
-
-	CMP	#$02			; compare the device with the RS232 device
-	BEQ	LAB_F1B8		; if RS232 device go get a byte from the RS232 device
-
+; NOTE: Removed RS232 handling here
 ; only the tape device left ..
 
 	STX	LAB_97		; save X
@@ -12139,22 +12211,6 @@ LAB_F1B4:
 LAB_F1B5:
 	JMP	LAB_EE13		; input byte from serial bus and return
 
-; input device was RS232 device
-
-LAB_F1B8:
-	JSR	LAB_F14E		; get byte from RS232 device
-	BCS	LAB_F1B4		; branch if error, this doesn't get taken as the last
-					; instruction in the get byte from RS232 device routine
-					; is CLC ??
-	CMP	#$00			; compare with null
-	BNE	LAB_F1B3		; exit if not null
-
-	LDA	LAB_0297		; get the RS232 status register
-	AND	#$60			; mask 0xx0 0000, DSR detected and ??
-	BNE	LAB_F1B1		; if ?? return null
-
-	BEQ	LAB_F1B8		; else loop, branch always
-
 
 ;************************************************************************************
 ;
@@ -12179,54 +12235,6 @@ LAB_F1DB:
 	LSR				; shift b0 of the device into Cb
 	PLA				; restore the output character
 
-
-;************************************************************************************
-;
-; output the character to the cassette or RS232 device
-
-LAB_F1DD:
-	STA	LAB_9E		; save the character to the character buffer
-	TXA				; copy X
-	PHA				; save X
-	TYA				; copy Y
-	PHA				; save Y
-	BCC	LAB_F208		; if Cb is clear it must be the RS232 device
-
-; output the character to the cassette
-
-	JSR	LAB_F80D		; bump the tape pointer
-	BNE	LAB_F1F8		; if not end save next byte and exit
-
-	JSR	LAB_F864		; initiate tape write
-	BCS	LAB_F1FD		; exit if error
-
-	LDA	#$02			; set data block type ??
-	LDY	#$00			; clear index
-	STA	(LAB_B2),Y		; save type to buffer ??
-	INY				; increment index
-	STY	LAB_A6		; save tape buffer index
-LAB_F1F8:
-	LDA	LAB_9E		; restore character from character buffer
-	STA	(LAB_B2),Y		; save to buffer
-LAB_F1FC:
-	CLC				; flag no error
-LAB_F1FD:
-	PLA				; pull Y
-	TAY				; restore Y
-	PLA				; pull X
-	TAX				; restore X
-	LDA	LAB_9E		; get the character from the character buffer
-	BCC	LAB_F207		; exit if no error
-
-	LDA	#$00			; else clear A
-LAB_F207:
-	RTS
-
-; output the character to the RS232 device
-
-LAB_F208:
-	JSR	LAB_F017		; send byte to the RS232 buffer, no setup
-	JMP	LAB_F1FC		; do no error exit
 
 
 ;************************************************************************************
@@ -12404,26 +12412,7 @@ LAB_F2C8:
 	AND	#$0F			; mask the device #
 	BEQ	LAB_F2F1		; if ?? restore index and close file
 
-	JSR	LAB_F7D0		; get tape buffer start pointer in XY
-	LDA	#$00			; character $00
-	SEC				; flag the tape device
-	JSR	LAB_F1DD		; output the character to the cassette or RS232 device
-	JSR	LAB_F864		; initiate tape write
-	BCC	LAB_F2E0		;.
-
-	PLA				;.
-	LDA	#$00			;.
-	RTS
-
-LAB_F2E0:
-	LDA	LAB_B9		; get the secondary address
-	CMP	#$62			;.
-	BNE	LAB_F2F1		; if not ?? restore index and close file
-
-	LDA	#$05			; set logical end of the tape
-	JSR	LAB_F76A		; write tape header
-	JMP	LAB_F2F1		; restore index and close file
-
+; NOTE: Removed some more tape-related code here. Above code won't work
 
 ;************************************************************************************
 ;
@@ -13237,24 +13226,31 @@ LAB_F6A7:
 					; $4F1A00 and not $4F1A01. this would give an extra jiffy
 					; every day and a possible TI value of 24:00:00
 LAB_F6BC:
-	LDA	LAB_DC01		; read VIA 1 DRB, keyboard row port
-	CMP	LAB_DC01		; compare it with itself
-	BNE	LAB_F6BC		; loop if changing
+	LDA #$05	; reset code
+	STA $4016   ; reset keyboard scan to row 0, column 0
+    LDA #$04   ; "next row" code
+	STA $4016  ; select column 0, next row if not just reset
+	LDX #$10
+@wait_for_row:
+	DEX
+	BNE @wait_for_row
 
-	TAX				;.
-	BMI	LAB_F6DA		;.
+	LDA #$06   ; "next column" code
+	STA $4016  ; select column 1
+	LDA $4017  ; read column 1 data
+	ASL
+	ASL
+	ASL
+	ORA #$5F ; we only care whether the STOP button and/or right shift were pressed
 
-	LDX	#$BD			; set c6
-	STX	LAB_DC00		; save VIA 1 DRA, keyboard column drive
-
-LAB_F6CC:
-	LDX	LAB_DC01		; read VIA 1 DRB, keyboard row port
-	CPX	LAB_DC01		; compare it with itself
-	BNE	LAB_F6CC		; loop if changing
-
-	STA	LAB_DC00		; save VIA 1 DRA, keyboard column drive
-	INX				;.
-	BNE	LAB_F6DC		;.
+	; TODO: Detect left shift + STOP. The original C64 code did something clever
+	; 		here, by ignoring STOP commands when any keypress was detected in in rows
+	;       1 or 6 (the rows for left & right shift, respectively). On the Famicom,
+	;		STOP and right shift share row 0 / column 1, but left shift is way down in
+	;		row 7 column 1. We could check for it, but it's a waste of time since
+	;       LOAD/RUN won't work anyway without peripheral support. Plus, FCEUX seems to
+	;       send register either shift key press on the host system as pressing both
+	;       shift keys on the Famicom. So few will likely notice.
 
 LAB_F6DA:
 	STA	LAB_91		; save the stop key column
@@ -13413,44 +13409,7 @@ LAB_F769:
 ; write the tape header
 
 LAB_F76A:
-	STA	LAB_9E		; save header type
-	JSR	LAB_F7D0		; get tape buffer start pointer in XY
-	BCC	LAB_F7CF		; if < $0200 just exit ??
-
-	LDA	LAB_C2		; get I/O start address high byte
-	PHA				; save it
-	LDA	LAB_C1		; get I/O start address low byte
-	PHA				; save it
-	LDA	LAB_AF		; get tape end address high byte
-	PHA				; save it
-	LDA	LAB_AE		; get tape end address low byte
-	PHA				; save it
-
-	LDY	#$BF			; index to header end
-	LDA	#' '			; clear byte, [SPACE]
 LAB_F781:
-	STA	(LAB_B2),Y		; clear header byte
-	DEY				; decrement index
-	BNE	LAB_F781		; loop if more to do
-
-	LDA	LAB_9E		; get the header type back
-	STA	(LAB_B2),Y		; write it to header
-	INY				; increment the index
-	LDA	LAB_C1		; get the I/O start address low byte
-	STA	(LAB_B2),Y		; write it to header
-	INY				; increment the index
-	LDA	LAB_C2		; get the I/O start address high byte
-	STA	(LAB_B2),Y		; write it to header
-	INY				; increment the index
-	LDA	LAB_AE		; get the tape end address low byte
-	STA	(LAB_B2),Y		; write it to header
-	INY				; increment the index
-	LDA	LAB_AF		; get the tape end address high byte
-	STA	(LAB_B2),Y		; write it to header
-	INY				; increment the index
-	STY	LAB_9F		; save the index
-	LDY	#$00			; clear Y
-	STY	LAB_9E		; clear the name index
 LAB_F7A5:
 	LDY	LAB_9E		; get name index
 	CPY	LAB_B7		; compare with file name length
@@ -13600,14 +13559,6 @@ LAB_F836:
 ; wait for PLAY/RECORD
 
 LAB_F838:
-	JSR	LAB_F82E		; return the cassette sense in Zb
-	BEQ	LAB_F836		; exit if switch closed
-
-					; cassette switch was open
-	LDY	#LAB_F0EB-LAB_F0BD
-					; index to "PRESS RECORD & PLAY ON TAPE"
-	BNE	LAB_F81E		; display message and wait for switch, branch always
-
 
 ;************************************************************************************
 ;
@@ -13641,24 +13592,15 @@ LAB_F84A:
 ; initiate a tape write
 
 LAB_F864:
-	JSR	LAB_F7D7		; set tape buffer start and end pointers
 
 ; do tape write, 20 cycle count
 
 LAB_F867:
-	LDA	#$14			; set write lead cycle count
-	STA	LAB_AB		; save write lead cycle count
 
 ; do tape write, no cycle count set
 
 LAB_F86B:
-	JSR	LAB_F838		; wait for PLAY/RECORD
 LAB_F86E:
-	BCS	LAB_F8DC		; if STOPped clear save IRQ address and exit
-
-	SEI				; disable interrupts
-	LDA	#$82			; enable ?? interrupt
-	LDX	#$08			; set index for tape write tape leader vector
 
 
 ;************************************************************************************
@@ -13666,37 +13608,12 @@ LAB_F86E:
 ; tape read/write
 
 LAB_F875:
-	LDY	#$7F			; disable all interrupts
-	STY	LAB_DC0D		; save VIA 1 ICR, disable all interrupts
-	STA	LAB_DC0D		; save VIA 1 ICR, enable interrupts according to A
-
-; check RS232 bus idle
-
-	LDA	LAB_DC0E		; read VIA 1 CRA
-	ORA	#$19			; load timer B, timer B single shot, start timer B
-	STA	LAB_DC0F		; save VIA 1 CRB
-	AND	#$91			; mask x00x 000x, TOD clock, load timer A, start timer A
-	STA	LAB_02A2		; save VIA 1 CRB shadow copy
-	JSR	LAB_F0A4		;.
-	LDA	LAB_D011		; read the vertical fine scroll and control register
-	AND	#$EF			; mask xxx0 xxxx, blank the screen
-	STA	LAB_D011		; save the vertical fine scroll and control register
-	LDA	LAB_0314		; get IRQ vector low byte
-	STA	LAB_029F		; save IRQ vector low byte
-	LDA	LAB_0315		; get IRQ vector high byte
-	STA	LAB_02A0		; save IRQ vector high byte
-	JSR	LAB_FCBD		; set the tape vector
-	LDA	#$02			; set copies count. the first copy is the load copy, the
-					; second copy is the verify copy
-	STA	LAB_BE		; save copies count
 	JSR	LAB_FB97		; new tape byte setup
 	LDA	LAB_01		; read the 6510 I/O port
 	AND	#$1F			; mask 000x xxxx, cassette motor on ??
 	STA	LAB_01		; save the 6510 I/O port
 	STA	LAB_C0		; set the tape motor interlock
 
-					; 326656 cycle delay, allow tape motor speed to stabilise
-	LDX	#$FF			; outer loop count
 LAB_F8B5:
 	LDY	#$FF			; inner loop count
 LAB_F8B7:
@@ -14630,23 +14547,118 @@ LAB_FCE1:
 ; RESET, hardware reset starts here
 
 LAB_FCE2:
-	LDX	#$FF			; set X for stack
-	SEI				; disable the interrupts
-	TXS				; clear stack
-	CLD				; clear decimal mode
-	JSR	LAB_FD02		; scan for autostart ROM at $8000
-	BNE	LAB_FCEF		; if not there continue startup
+	SEI
+	CLD            ; Clear decimal flag, even though the NES CPU doesn't support it
 
-	JMP	(LAB_8000)		; else call ROM start code
+	STA $2000      ; Disable NMIs
+
+	LDA #$06
+	STA $2001      ; Shut off PPU
+
+	LDX #$02       ; Wait for 2 vblanks so that the PPU can warm up
+@wait_for_ppu:
+	BIT $2002
+	BPL @wait_for_ppu
+	DEX
+	BNE @wait_for_ppu
+
+	STX $5010      ; Disable MMC5 PCM and IRQs
+	STX $4010      ; Disable DMC IRQs
+	LDA #$C0
+	STA $4017
+
+	; enable IRQ on scanline 1
+	LDA #$01
+	STA $5203
+	LDA #$80
+	STA $5204
+
+	LDX	#$FF		; set X for stack
+	TXS				; clear stack
+
 
 LAB_FCEF:
-	STX	LAB_D016		; read the horizontal fine scroll and control register
+	; Set up banks
+
+	; enable 4 8kB banks
+	LDA     #$03
+	STA     $5100
+
+	; enable 2 4kB CHR page
+	LDA     #$01
+	STA     $5101
+
+	; select bank 0 (upper case) for background
+	LDA 	#$00
+	STA		$5123
+	STA		LAB_DC
+
+	; enable writing to PRG RAM
+	LDA     #$02
+	STA     $5102
+	LDA     #$01
+	STA     $5103
+
+	;       All nametables point to expansion ram
+	LDA     #%10101010
+	STA     $5105
+
+	;       Set up RAM banks
+	LDA     #$00
+	STA     $5113  ; PRG RAM bank 0 @ $6000-$7FFF
+	LDA     #$01
+	STA     $5114  ; PRG RAM bank 1 @ $8000-$9FFF
+	LDA     #$02
+	STA     $5115  ; PRG RAM bank 2 @ $A000-$BFFF
+	;       Set up ROM banks
+	LDA     #$80
+	STA     $5116  ; PRG ROM bank 0 @ $C000-$DFFF
+	LDA     #$81
+	STA     $5117  ; PRG ROM bank 1 @ $E000-$FFFF
+
+	; set palettes
+	LDA $2002    ; read PPU status to reset the high/low latch to high
+	LDA #$3F
+	STA $2006    ; write the high byte of $3F00 address
+	LDA #$00
+	STA $2006    ; write the low byte of $3F00 address
+
+	; Do I need to do this again?
+	LDA $2002    ; read PPU status to reset the high/low latch to high
+	LDA #$00
+	STA $2005    ; Set x & y scroll positions to 0
+	STA $2005
+
+	LDX #$00
+palette_loop:
+	LDA palette_data, x
+	STA $2007               ; Write palette color to PPU
+	INX
+	CPX #$20
+	BNE palette_loop
+
+	LDA #$0e
+	STA $2001 ; Enable backgrounds, but not sprites
+
+	LDX #$00
+
+	; use extended ram as writeable nametable
+	LDA     #$00
+	STA     $5104
+
+
+
+	;STX	LAB_D016		; read the horizontal fine scroll and control register
 	JSR	LAB_FDA3		; initialise SID, CIA and IRQ
 	JSR	LAB_FD50		; RAM test and find RAM end
 	JSR	LAB_FD15		; restore default I/O vectors
 	JSR	LAB_FF5B		; initialise VIC and screen editor
-	CLI				; enable the interrupts
+ 	CLI				; enable the interrupts
 	JMP	(LAB_A000)		; execute BASIC
+
+palette_data:
+        .byte $12,$31,$32,$22,$12,$31,$32,$22,$12,$31,$32,$22,$12,$31,$32,$22  ; background palette data
+        .byte $12,$31,$32,$22,$12,$31,$32,$22,$12,$31,$32,$22,$12,$31,$32,$22  ; sprite palette data
 
 
 ;************************************************************************************
@@ -14654,23 +14666,13 @@ LAB_FCEF:
 ; scan for autostart ROM at $8000, returns Zb=1 if ROM found
 
 LAB_FD02:
-	LDX	#$05			; five characters to test
 LAB_FD04:
-	LDA	LAB_FD10-1,X	; get test character
-	CMP	LAB_8004-1,X	; compare wiith byte in ROM space
-	BNE	LAB_FD0F		; exit if no match
-
-	DEX				; decrement index
-	BNE	LAB_FD04		; loop if not all done
 
 LAB_FD0F:
-	RTS
 
 ; autostart ROM signature
 
 LAB_FD10:
-	.byte	$C3,$C2,$CD,$38,$30
-					; CBM80
 
 
 ;************************************************************************************
@@ -14775,13 +14777,12 @@ LAB_FD53:
 	STA	LAB_0300,Y		; clear page 3
 	INY				; increment index
 	BNE	LAB_FD53		; loop if more to do
-
 	LDX	#<LAB_033C		; set cassette buffer pointer low byte
 	LDY	#>LAB_033C		; set cassette buffer pointer high byte
 	STX	LAB_B2		; save tape buffer start pointer low byte
 	STY	LAB_B3		; save tape buffer start pointer high byte
 	TAY				; clear Y
-	LDA	#$03			; set RAM test pointer high byte
+	LDA	#>(__PRGRAM_START__ - 1) ; set RAM test pointer high byte
 	STA	LAB_C2		; save RAM test pointer high byte
 LAB_FD6C:
 	INC	LAB_C2		; increment RAM test pointer high byte
@@ -14806,11 +14807,11 @@ LAB_FD88:
 	TAX				;.
 	LDY	LAB_C2		;.
 	CLC				;.
-	JSR	LAB_FE2D		; set the top of memory
-	LDA	#$08			;.
-	STA	LAB_0282		; save the OS start of memory high byte
-	LDA	#$04			;.
-	STA	LAB_0288		; save the screen memory page
+	JSR	LAB_FE2D					; set the top of memory
+	LDA	#>__PRGRAM_START__			;.
+	STA	LAB_0282					; save the OS start of memory high byte
+	LDA	#>__EXRAM_START__			;.
+	STA	LAB_0288					; save the screen memory page
 	RTS
 
 
@@ -14830,47 +14831,13 @@ LAB_FD9B:
 ; initialise SID, CIA and IRQ
 
 LAB_FDA3:
-	LDA	#$7F			; disable all interrupts
-	STA	LAB_DC0D		; save VIA 1 ICR
-	STA	LAB_DD0D		; save VIA 2 ICR
-	STA	LAB_DC00		; save VIA 1 DRA, keyboard column drive
-	LDA	#$08			; set timer single shot
-	STA	LAB_DC0E		; save VIA 1 CRA
-	STA	LAB_DD0E		; save VIA 2 CRA
-	STA	LAB_DC0F		; save VIA 1 CRB
-	STA	LAB_DD0F		; save VIA 2 CRB
-	LDX	#$00			; set all inputs
-	STX	LAB_DC03		; save VIA 1 DDRB, keyboard row
-	STX	LAB_DD03		; save VIA 2 DDRB, RS232 port
-	STX	LAB_D418		; clear the volume and filter select register
-	DEX				; set X = $FF
-	STX	LAB_DC02		; save VIA 1 DDRA, keyboard column
-	LDA	#$07			; DATA out high, CLK out high, ATN out high, RE232 Tx DATA
-					; high, video address 15 = 1,	video address 14 = 1
-	STA	LAB_DD00		; save VIA 2 DRA, serial port and video address
-	LDA	#$3F			; set serial DATA input, serial CLK input
-	STA	LAB_DD02		; save VIA 2 DDRA, serial port and video address
-	LDA	#$E7			; set 1110 0111, motor off, enable I/O, enable KERNAL,
-					; enable BASIC
+	LDA #$F7 				; set 1111 0111, motor off, enable I/O, enable KERNAL,
+	 						;  cassette switch high, enable BASIC
 	STA	LAB_01		; save the 6510 I/O port
-	LDA	#$2F			; set 0010 1111, 0 = input, 1 = output
-	STA	LAB_00		; save the 6510 I/O port direction register
 LAB_FDDD:
-	LDA	LAB_02A6		; get the PAL/NTSC flag
-	BEQ	LAB_FDEC		; if NTSC go set NTSC timing
-
-					; else set PAL timing
-	LDA	#$25			;.
-	STA	LAB_DC04		; save VIA 1 timer A low byte
-	LDA	#$40			;.
-	JMP	LAB_FDF3		;.
 
 LAB_FDEC:
-	LDA	#$95			;.
-	STA	LAB_DC04		; save VIA 1 timer A low byte
-	LDA	#$42			;.
 LAB_FDF3:
-	STA	LAB_DC05		; save VIA 1 timer A high byte
 	JMP	LAB_FF6E		;.
 
 
@@ -15009,11 +14976,6 @@ LAB_FE47:
 	LDY	LAB_DD0D		; save VIA 2 ICR
 	BMI	LAB_FE72		;.
 
-	JSR	LAB_FD02		; scan for autostart ROM at $8000
-	BNE	LAB_FE5E		; branch if no autostart ROM
-
-	JMP	(LAB_8002)		; else do autostart ROM break entry
-
 LAB_FE5E:
 	JSR	LAB_F6BC		; increment real time clock
 	JSR	LAB_FFE1		; scan stop key
@@ -15102,16 +15064,6 @@ LAB_FEBC:
 ; baud rate tables for NTSC C64
 
 LAB_FEC2:
-	.word	$27C1			;   50   baud	1027700
-	.word	$1A3E			;   75   baud	1022700
-	.word	$11C5			;  110   baud	1022780
-	.word	$0E74			;  134.5 baud	1022200
-	.word	$0CED			;  150   baud	1022700
-	.word	$0645			;  300   baud	1023000
-	.word	$02F0			;  600   baud	1022400
-	.word	$0146			; 1200   baud	1022400
-	.word	$00B8			; 1800   baud	1022400
-	.word	$0071			; 2400   baud	1022400
 
 
 ;************************************************************************************
@@ -15204,6 +15156,12 @@ LAB_FF48:
 	TYA				; copy Y
 	PHA				; save Y
 	TSX				; copy stack pointer
+
+	;acknowledge raster IRQ
+	lda $5204
+	; acknowledge timer IRQ
+	lda $5209
+
 	LDA	LAB_0100+4,X	; get stacked status register
 	AND	#$10			; mask BRK flag
 	BEQ	LAB_FF58		; branch if not BRK
@@ -15221,12 +15179,6 @@ LAB_FF58:
 LAB_FF5B:
 	JSR	LAB_E518		; initialise the screen and keyboard
 LAB_FF5E:
-	LDA	LAB_D012		; read the raster compare register
-	BNE	LAB_FF5E		; loop if not raster line $00
-
-	LDA	LAB_D019		; read the vic interrupt flag register
-	AND	#$01			; mask the raster compare flag
-	STA	LAB_02A6		; save the PAL/NTSC flag
 	JMP	LAB_FDDD		;.
 
 
@@ -15235,12 +15187,6 @@ LAB_FF5E:
 ; ??
 
 LAB_FF6E:
-	LDA	#$81			; enable timer A interrupt
-	STA	LAB_DC0D		; save VIA 1 ICR
-	LDA	LAB_DC0E		; read VIA 1 CRA
-	AND	#$80			; mask x000 0000, TOD clock
-	ORA	#$11			; mask xxx1 xxx1, load timer A, start timer A
-	STA	LAB_DC0E		; save VIA 1 CRA
 	JMP	LAB_EE8E		; set the serial clock out low and return
 
 
@@ -15861,9 +15807,9 @@ LAB_FFF3:
 ;LAB_FFF6
 	.byte	"RRBY"
 
-.segment "VECTORS"
-
 ; hardware vectors
+
+.segment "VECTORS"
 
 ;LAB_FFFA
 	.word	LAB_FE43		; NMI vector
