@@ -5,6 +5,8 @@ This project is experimental and comes with no warranties, guarantees or any exp
 
 The KERNAL and ROM disassembly come from [Project 64 Reloaded](https://github.com/Project-64/reloaded), with annotations by Lee Davison.
 
+You can build it yourself, or [download one of the releases](https://github.com/calcwatch/nes64/releases).
+
 ## How to Build
 First, make sure you have `make` set up on your machine, and that you have the `cc65` package installed in your default path. You can get cc65 [here](https://cc65.github.io/). The project requires its assembler (`ca65`) and linker (`ld65`).
 
