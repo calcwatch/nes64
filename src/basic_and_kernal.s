@@ -1320,11 +1320,12 @@ TK_GO		= $CB			; GO token
 TK_PI		= $FF			; PI token
 
 
+.segment "BASIC"
+
 ;************************************************************************************
 ;
 ; start of the BASIC ROM
 
-	.ORG	$A000
 
 LAB_A000:
 	.word	LAB_E394		; BASIC cold start entry point
@@ -8285,11 +8286,11 @@ LAB_BFFD:
 	JMP	LAB_E000		; continue EXP()
 
 
+.segment "KERNAL"
+
 ;************************************************************************************
 ;
 ; start of the kernal ROM
-
-	.ORG	$E000
 
 ; EXP() continued
 
@@ -11746,7 +11747,7 @@ LAB_EFB1:
 
 	.byte	$2C			; makes next line BIT LAB_xxxx
 LAB_EFC5:
-	BVC	$EF6D			; if ?? just exit
+	BVC	LAB_EF6D		; if ?? just exit
 
 	LDA	#$01			; set Rx parity error
 	.byte	$2C			; makes next line BIT LAB_xxxx
@@ -15859,6 +15860,8 @@ LAB_FFF3:
 
 ;LAB_FFF6
 	.byte	"RRBY"
+
+.segment "VECTORS"
 
 ; hardware vectors
 
