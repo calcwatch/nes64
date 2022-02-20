@@ -10139,7 +10139,7 @@ LAB_E874:
 	ORA	#$80			; restore b7, colour can only be black, cyan, magenta
 					; or yellow
 	JSR	LAB_E8CB		; set the colour code
-	JMP	LAB_EC4F		; go check for special character codes except fro switch
+	JMP	LAB_EC4F		; go check for special character codes except for switch
 					; to lower case
 
 
