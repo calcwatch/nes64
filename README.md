@@ -14,7 +14,7 @@ Then simply run `make` from the root directory. It will create a `rom/` subdirec
 
 ## Current Status
 
-NES 64 has been tested on [FCEUX](https://fceux.com/) 2.6.2 for macOS. It hasn't been confirmed to work on hardware yet. To run it on hardware, you'll need [MMC5](https://wiki.nesdev.org/w/index.php/MMC5) mapper support.
+NES 64 has been tested on [FCEUX](https://fceux.com/) 2.6.2 for macOS and [Nintendulator](https://www.qmtpro.com/~nes/nintendulator) 0.985 for 64bit Windows. It hasn't been confirmed to work on hardware yet. To run it on hardware, you'll need [MMC5](https://wiki.nesdev.org/w/index.php/MMC5) mapper support.
 
 You should be able to type and run BASIC programs, but don't expect `POKE`, `PEEK` or `SYS` calls to work as they did on the real Commodore 64. The memory and hardware layouts are totally different.
 
@@ -30,7 +30,11 @@ As an bonus feature, you can inspect the output of NES controllers 1 and 2 with 
 
 The 32x30 character text screen will likely get cropped when displayed on a real TV. In the future, the window size may change to avoid this problem. FCEUX has an option to display the entire screen.
 
-FCEUX 2.6.2 was observed to have issues with keyboard support. In particular, it had trouble with shifted numbers and symbols. For example, nothing happened most of the time when pressing "shift+1" to type "!". To work around this, you can use the CTRL key (the "command" key on Macs) as a replacement for shift. This means that the usual Commodore CTRL key combinations are unavailable. (But many of those are for changing the text color, and that's not supported anyway.)
+In Nintendulator, you'll see some flickering, especially during scrolling. This likely occurs on hardware as well. This is a side-effect of how the Extended RAM (ExRAM) used for the screen is being shared between the CPU and the PPU. Whenever the PPU is blocked from reading from the RAM, it prints the `@` character repeatedly. This can probably be fixed in the future with smarter read and write scheduling.
+
+FCEUX 2.6.2 has [an issue](https://github.com/TASEmulators/fceux/issues/464) with keyboard support for shifted numbers and symbols. For example, nothing happens most of the time when pressing "shift+1" to type "!". To work around this, you can use the CTRL key (the "command" key on Macs) as a replacement for shift. This means that the usual Commodore CTRL key combinations are unavailable. (But many of those are for changing the text color, and that's not supported anyway.)
+
+Lines of BASIC code can't span more than one screen line like on the Commodore 64. This may be fixed in the future.
 
 You cannot use the CTRL key to slow down scrolling text output in BASIC. This may be fixed in the future.
 
