@@ -5,7 +5,7 @@
         .byte   <NES_PRG_BANKS                          ; ines prg  - Specifies the number of 16k prg banks.
         .byte   <NES_CHR_BANKS                          ; ines chr  - Specifies the number of 8k chr banks.
         .byte   <NES_MIRRORING | (<NES_MAPPER << 4)     ; ines mir  - Specifies VRAM mirroring of the banks.
-        .byte   <NES_MAPPER & $f0                       ; ines map  - Specifies the NES mapper used.
+        .byte   (<NES_MAPPER & $f0) | $08               ; ines map  - Specifies the NES mapper used and declares this as a NES 2.0 header
         .byte   0                                       ; Mapper MSB/Submapper
         .byte   0                                       ; PRG-ROM/CHR-ROM size MSB 
         .byte   10                                      ; 64 kB RAM (64 << 10)
