@@ -762,6 +762,8 @@ LAB_DC = $DC ; 4kB CHRROM bank selected for background
 LAB_DD = $DD ; controller 1 inputs
 LAB_DE = $DE ; controller 2 inputs
 
+LAB_DF = $DF ; $5104 register's status
+LAB_E0 = $E0 ; screen char read scratch space
 
 LAB_F3	= $F3			; colour RAM pointer low byte
 LAB_F4	= $F4			; colour RAM pointer high byte
@@ -9358,8 +9360,6 @@ LAB_E518:
 	LDA	#$0A			; set the maximum size of the keyboard buffer
 	STA	LAB_0289		; save the maximum size of the keyboard buffer
 	STA	LAB_028C		; save the repeat delay counter
-	LDA	#$0E			; set light blue
-	STA	LAB_0286		; save the current colour code
 	LDA	#$04			; speed 4
 	STA	LAB_028B		; save the repeat speed counter
 	LDA	#$0C			; set the cursor flash timing
@@ -9444,7 +9444,7 @@ LAB_E582:
 
 LAB_E58C:
 	STA	LAB_D5		; save current screen line length
-	JMP	LAB_EA24		; calculate the pointer to colour RAM and return
+	RTS
 
 LAB_E591:
 	CPX	LAB_C9		; compare it with the input cursor row
@@ -9567,7 +9567,6 @@ LAB_E5FE:
 	; make nametable visible to CPU
     LDA     #$02
     STA     $5104
-
 LAB_E606:
 	LDA	(LAB_D1),Y		; get the character from the current screen line
 	CMP	#' '			; compare it with [SPACE]
@@ -9580,6 +9579,7 @@ LAB_E60F:
 	; make nametable visible to PPU
     LDA     #$00
     STA     $5104
+
 
 	INY				; increment past the last non space character on line
 	STY	LAB_C8		; save the input [EOL] pointer
@@ -9621,6 +9621,7 @@ LAB_E63A:
 
 	; make nametable visible to CPU
     LDA     #$02
+	STA 	LAB_DF
     STA     $5104
 
 	LDA	(LAB_D1),Y		; get character from the current screen line
@@ -9628,6 +9629,7 @@ LAB_E63A:
 
 	; make nametable visible to PPU
     LDA     #$00
+	STA 	LAB_DF
     STA     $5104
 
 	LDA LAB_D7
@@ -9905,28 +9907,32 @@ LAB_E759:
 					; now close up the line
 	DEY				; decrement index to previous character
 	STY	LAB_D3		; save the cursor column
-	JSR	LAB_EA24		; calculate the pointer to colour RAM
 
 	; make nametable visible to CPU
     LDA     #$02
+	STA 	LAB_DF
     STA     $5104
 
 LAB_E762:
 	INY				; increment index to next character
+
 	LDA	(LAB_D1),Y		; get character from current screen line
 	DEY				; decrement index to previous character
 	STA	(LAB_D1),Y		; save character to current screen line
+
 	INY				; increment index to next character
 	CPY	LAB_D5		; compare with current screen line length
 	BNE	LAB_E762		; loop if not there yet
 
 LAB_E773:
-	; make nametable visible to PPU
-    LDA     #$02
-    STA     $5104
-
 	LDA	#' '			; set [SPACE]
 	STA	(LAB_D1),Y		; clear last character on current screen line
+
+	; make nametable visible to PPU
+    LDA     #$00
+	STA 	LAB_DF
+    STA     $5104
+
 	BPL	LAB_E7CB		; branch always
 
 LAB_E77E:
@@ -10029,6 +10035,7 @@ LAB_E7EA:
 
 	; make nametable visible to CPU
     LDA     #$02
+	STA 	LAB_DF
     STA     $5104
 
 	LDA	(LAB_D1),Y		; get character from current screen line
@@ -10036,6 +10043,7 @@ LAB_E7EA:
 
 	; make nametable visible to PPU
     LDA     #$00
+	STA 	LAB_DF
     STA     $5104
 
 	PLA
@@ -10056,6 +10064,7 @@ LAB_E805:
 
 	; make nametable visible to CPU
     LDA     #$02
+	STA 	LAB_DF
     STA     $5104
 LAB_E80A:
 	DEY				; decrement the index to previous character
@@ -10066,12 +10075,14 @@ LAB_E80A:
 	CPY	LAB_D3		; compare the index with the cursor column
 	BNE	LAB_E80A		; loop if not there yet
 
-	; make nametable visible to PPU
-    LDA     #$00
-    STA     $5104
-
 	LDA	#' '			; set [SPACE]
 	STA	(LAB_D1),Y		; clear character at cursor position on current screen line
+
+	; make nametable visible to PPU
+    LDA     #$00
+	STA 	LAB_DF
+    STA     $5104
+
 	INC	LAB_D8		; increment insert count
 LAB_E826:
 	JMP	LAB_E6A8		; restore the registers, set the quote flag and exit
@@ -10456,30 +10467,24 @@ LAB_E9C8:
 	AND	#$03			; mask 0000 00xx, line memory page
 	ORA	LAB_0288		; OR with screen memory page
 	STA	LAB_AD		; save next/previous line pointer high byte
-	JSR	LAB_E9E0		; calculate pointers to screen lines colour RAM
 	LDY	#(SCREEN_WIDTH-1)			; set the column count
+	; make nametable visible to CPU
+    LDA     #$02
+	STA 	LAB_DF
+    STA     $5104
 LAB_E9D4:
+
 	LDA	(LAB_AC),Y		; get character from next/previous screen line
 	STA	(LAB_D1),Y		; save character to current screen line
+
 	DEY				; decrement column index/count
 	BPL	LAB_E9D4		; loop if more to do
 
-	RTS
-
-
-;************************************************************************************
-;
-; calculate pointers to screen lines colour RAM
-
-LAB_E9E0:
-	JSR	LAB_EA24		; calculate the pointer to the current screen line colour
-					; RAM
-	LDA	LAB_AC		; get the next screen line pointer low byte
-	STA	LAB_AE		; save the next screen line colour RAM pointer low byte
-	LDA	LAB_AD		; get the next screen line pointer high byte
-	AND	#$03			; mask 0000 00xx, line memory page
-	ORA	#>LAB_D800		; set  1101 01xx, colour memory page
-	STA	LAB_AF		; save the next screen line colour RAM pointer high byte
+	; make nametable visible to PPU
+    LDA     #$00
+	STA 	LAB_DF
+    STA     $5104
+	LDA 	#$80 ; reset negative flag
 	RTS
 
 
@@ -10504,14 +10509,21 @@ LAB_E9F0:
 LAB_E9FF:
 	LDY	#(SCREEN_WIDTH-1)			; set number of columns to clear
 	JSR	LAB_E9F0		; fetch a screen address
-	JSR	LAB_EA24		; calculate the pointer to colour RAM
+	; make nametable visible to CPU
+    LDA     #$02
+	STA 	LAB_DF
+    STA     $5104
 LAB_EA07:
-	JSR	LAB_E4DA		; save the current colour to the colour RAM
 	LDA	#' '			; set [SPACE]
 	STA	(LAB_D1),Y		; clear character in current screen line
 	DEY				; decrement index
 	BPL	LAB_EA07		; loop if more to do
 
+	; make nametable visible to PPU
+    LDA     #$00
+	STA 	LAB_DF
+    STA     $5104
+	LDA		#$80 ; restore negative flag
 	RTS
 
 
@@ -10531,7 +10543,6 @@ LAB_EA13:
 	TAY				; copy the character
 	LDA	#$02			; set the count to $02, usually $14 ??
 	STA	LAB_CD		; save the cursor countdown
-	JSR	LAB_EA24		; calculate the pointer to colour RAM
 	TYA				; get the character back
 
 
@@ -10541,15 +10552,18 @@ LAB_EA13:
 
 LAB_EA1C:
 	LDY	LAB_D3		; get the cursor column
+	STA LAB_E0
+	; make nametable visible to CPU
+    LDA     #$02
+	STA 	LAB_DF
+    STA     $5104
+	LDA LAB_E0
 	STA	(LAB_D1),Y		; save the character from current screen line
-	RTS
-
-
-;************************************************************************************
-;
-; calculate the pointer to colour RAM
-
-LAB_EA24:
+	; make nametable visible to PPU
+    LDA     #$00
+	STA 	LAB_DF
+    STA     $5104
+	LDA LAB_E0
 	RTS
 
 
@@ -10569,7 +10583,6 @@ LAB_EA31:
 	STA	LAB_CD		; save the cursor timing countdown
 	LDY	LAB_D3		; get the cursor column
 	LSR	LAB_CF		; shift b0 cursor blink phase into carry
-	LDX	LAB_0287		; get the colour under the cursor
 
 	; enable reading from the screen
 	LDA     #$02
@@ -10621,7 +10634,12 @@ LAB_EA7B:
 	TAY				; restore Y
 	PLA				; pull X
 	TAX				; restore X
+
+	LDA 	LAB_DF
+	STA		$5104   ; restore status of ExRAM visibility prior to IRQ
+
 	PLA				; restore A
+
 	RTI
 
 ;************************************************************************************
@@ -14567,8 +14585,8 @@ LAB_FCE2:
 	LDA #$C0
 	STA $4017
 
-	; enable IRQ on scanline 1
-	LDA #$01
+	; enable IRQ on scanline 239
+	LDA #239
 	STA $5203
 	LDA #$80
 	STA $5204
@@ -14644,6 +14662,7 @@ palette_loop:
 
 	; use extended ram as writeable nametable
 	LDA     #$00
+	STA 	LAB_DF
 	STA     $5104
 
 
@@ -14971,10 +14990,6 @@ LAB_FE47:
 	PHA				; save X
 	TYA				; copy Y
 	PHA				; save Y
-	LDA	#$7F			; disable all interrupts
-	STA	LAB_DD0D		; save VIA 2 ICR
-	LDY	LAB_DD0D		; save VIA 2 ICR
-	BMI	LAB_FE72		;.
 
 LAB_FE5E:
 	JSR	LAB_F6BC		; increment real time clock
