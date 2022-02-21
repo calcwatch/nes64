@@ -10606,30 +10606,7 @@ LAB_EA5C:
 	EOR	#$80			; toggle b7 of character under cursor
 	JSR	LAB_EA1C		; save the character and colour to the screen @ the cursor
 LAB_EA61:
-	LDA	LAB_01		; read the 6510 I/O port
-	AND	#$10			; mask 000x 0000, the cassette switch sense
-	BEQ	LAB_EA71		; if the cassette sense is low skip the motor stop
-
-					; the cassette sense was high, the switch was open, so turn
-					; off the motor and clear the interlock
-	LDY	#$00			; clear Y
-	STY	LAB_C0		; clear the tape motor interlock
-	LDA	LAB_01		; read the 6510 I/O port
-	ORA	#$20			; mask xxxx xx1x, turn off the motor
-	BNE	LAB_EA79		; go save the port value, branch always
-
-					; the cassette sense was low so turn the motor on, perhaps
-LAB_EA71:
-	LDA	LAB_C0		; get the tape motor interlock
-	BNE	LAB_EA7B		; if the cassette interlock <> 0 don't turn on motor
-
-	LDA	LAB_01		; read the 6510 I/O port
-	AND	#$1F			; mask xxxx xx0x, turn on the motor
-LAB_EA79:
-	STA	LAB_01		; save the 6510 I/O port
-LAB_EA7B:
 	JSR	LAB_EA87		; scan the keyboard and controllers
-	LDA	LAB_DC0D		; read VIA 1 ICR, clear the timer interrupt flag
 	PLA				; pull Y
 	TAY				; restore Y
 	PLA				; pull X
