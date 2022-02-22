@@ -10740,8 +10740,6 @@ key_row_scan_loop:
 	DEX
 	BNE @wait_for_row
 
-	LDX	#$08	; set the column count
-
 	LDA $4017  ; read column 0 data
 
 	; do stuff with col 0
@@ -10751,7 +10749,14 @@ key_row_scan_loop:
 
 	LDA #$06   ; "next column" code
 	STA $4016  ; select column 1
+	LDX #$0a
+@wait_for_column:
+	DEX
+	BNE @wait_for_column
+
 	LDA $4017  ; read column 1 data
+
+	LDX	#$08	; set the column count
 
 	; do stuff with col 1
 	ASL a
