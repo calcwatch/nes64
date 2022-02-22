@@ -9532,7 +9532,6 @@ LAB_E5CD:
 
 					; else it is the character phase
 	LDA	LAB_CE		; get the character under the cursor
-	LDX	LAB_0287		; get the colour under the cursor
 	LDY	#$00			; clear Y
 	STY	LAB_CF		; clear the cursor blink phase
 	JSR	LAB_EA13		; print character A and colour X
@@ -9726,7 +9725,6 @@ LAB_E699:
 
 	DEC	LAB_D8		; else decrement the insert count
 LAB_E69F:
-	LDX	LAB_0286		; get the current colour code
 	JSR	LAB_EA13		; print character A and colour X
 	JSR	LAB_E6B6		; advance the cursor
 
@@ -10061,6 +10059,11 @@ LAB_E7FE:
 					; now open up space on the line to insert a character
 LAB_E805:
 	LDY	LAB_D5		; get current screen line length
+
+	LDA #$40
+@wait_for_ppu:
+	BIT $5204
+	BNE @wait_for_ppu
 
 	; make nametable visible to CPU
     LDA     #$02
@@ -10569,7 +10572,7 @@ LAB_EA1C:
 
 ;************************************************************************************
 ;
-; IRQ vector
+; NMI vector (formerly the C64's IRQ vector)
 
 LAB_EA31:
 	JSR	LAB_FFEA		; increment the real time clock
@@ -10683,7 +10686,7 @@ key_row_scan_loop:
     LDA #$04   ; "next row" code
 	STA $4016  ; select column 0, next row if not just reset
 	TXA
-	LDX #$10
+	LDX #$0a
 @wait_for_row:
 	DEX
 	BNE @wait_for_row
@@ -13225,7 +13228,7 @@ LAB_F6BC:
 	STA $4016   ; reset keyboard scan to row 0, column 0
     LDA #$04   ; "next row" code
 	STA $4016  ; select column 0, next row if not just reset
-	LDX #$10
+	LDX #$0a
 @wait_for_row:
 	DEX
 	BNE @wait_for_row
@@ -14562,10 +14565,8 @@ LAB_FCE2:
 	LDA #$C0
 	STA $4017
 
-	; enable IRQ on scanline 239
-	LDA #239
-	STA $5203
-	LDA #$80
+	; No scanline IRQs
+	LDA #$00
 	STA $5204
 
 	LDX	#$FF		; set X for stack
@@ -14643,12 +14644,16 @@ palette_loop:
 	STA     $5104
 
 
-
-	;STX	LAB_D016		; read the horizontal fine scroll and control register
 	JSR	LAB_FDA3		; initialise SID, CIA and IRQ
 	JSR	LAB_FD50		; RAM test and find RAM end
 	JSR	LAB_FD15		; restore default I/O vectors
 	JSR	LAB_FF5B		; initialise VIC and screen editor
+
+
+	LDA #$80
+	STA $2000 ; Enable NMI on vblank
+
+
  	CLI				; enable the interrupts
 	JMP	(LAB_A000)		; execute BASIC
 
@@ -14733,7 +14738,7 @@ LAB_FD27:
 LAB_FD30:
 	.word	LAB_EA31		; LAB_0314	IRQ vector
 	.word	LAB_FE66		; LAB_0316	BRK vector
-	.word	LAB_FE47		; LAB_0318	NMI vector
+	.word	LAB_EA31		; LAB_0318	NMI vector
 	.word	LAB_F34A		; LAB_031A	open a logical file
 	.word	LAB_F291		; LAB_031C	close a specified logical file
 	.word	LAB_F20E		; LAB_031E	open channel for input
@@ -14950,32 +14955,6 @@ LAB_FE3C:
 
 ;************************************************************************************
 ;
-; NMI vector
-
-LAB_FE43:
-	SEI				; disable the interrupts
-	JMP	(LAB_0318)		; do NMI vector
-
-
-;************************************************************************************
-;
-; NMI handler
-
-LAB_FE47:
-	PHA				; save A
-	TXA				; copy X
-	PHA				; save X
-	TYA				; copy Y
-	PHA				; save Y
-
-LAB_FE5E:
-	JSR	LAB_F6BC		; increment real time clock
-	JSR	LAB_FFE1		; scan stop key
-	BNE	LAB_FE72		; if not [STOP] restore registers and exit interrupt
-
-
-;************************************************************************************
-;
 ; user function default vector
 ; BRK handler
 
@@ -15139,7 +15118,7 @@ LAB_FF43:
 
 ;************************************************************************************
 ;
-; IRQ vector
+; NMI vector (formerly the C64 IRQ vector) -- triggers on each vblank
 
 LAB_FF48:
 	PHA				; save A
@@ -15149,11 +15128,6 @@ LAB_FF48:
 	PHA				; save Y
 	TSX				; copy stack pointer
 
-	;acknowledge raster IRQ
-	lda $5204
-	; acknowledge timer IRQ
-	lda $5209
-
 	LDA	LAB_0100+4,X	; get stacked status register
 	AND	#$10			; mask BRK flag
 	BEQ	LAB_FF58		; branch if not BRK
@@ -15161,7 +15135,7 @@ LAB_FF48:
 	JMP	(LAB_0316)		; else do BRK vector (iBRK)
 
 LAB_FF58:
-	JMP	(LAB_0314)		; do IRQ vector (iIRQ)
+	JMP	(LAB_0318)		; do NMI vector
 
 
 ;************************************************************************************
@@ -15804,7 +15778,7 @@ LAB_FFF3:
 .segment "VECTORS"
 
 ;LAB_FFFA
-	.word	LAB_FE43		; NMI vector
+	.word	LAB_FF48		; NMI vector
 	.word	LAB_FCE2		; RESET vector
 	.word	LAB_FF48		; IRQ vector
 
