@@ -59,6 +59,8 @@
 SCREEN_WIDTH = $20
 SCREEN_HEIGHT = $1E
 
+TOP_SCANLINE_IRQ = 8
+BOTTOM_SCANLINE_IRQ = 232
 
 LAB_00	= $00			; 6510 I/O port data direction register
 					; bit	default
@@ -764,6 +766,8 @@ LAB_DE = $DE ; controller 2 inputs
 
 LAB_DF = $DF ; $5104 register's status
 LAB_E0 = $E0 ; screen char read scratch space
+
+LAB_E1 = $E1 ; 1 = upper scanline triggered, 0 = lower scanline triggered
 
 LAB_F3	= $F3			; colour RAM pointer low byte
 LAB_F4	= $F4			; colour RAM pointer high byte
@@ -9527,6 +9531,7 @@ LAB_E5CD:
 	BEQ	LAB_E5CD		; loop if the buffer is empty
 
 	SEI				; disable the interrupts
+
 	LDA	LAB_CF		; get the cursor blink phase
 	BEQ	LAB_E5E7		; if cursor phase skip the overwrite
 
@@ -9897,6 +9902,12 @@ LAB_E74C:
 	BNE	LAB_E759		;.
 
 	JSR	LAB_E701		; back onto the previous line if possible
+
+	; make nametable visible to CPU
+    LDA     #$02
+	STA 	LAB_DF
+    STA     $5104
+
 	JMP	LAB_E773		;.
 
 LAB_E759:
@@ -10059,11 +10070,6 @@ LAB_E7FE:
 					; now open up space on the line to insert a character
 LAB_E805:
 	LDY	LAB_D5		; get current screen line length
-
-	LDA #$40
-@wait_for_ppu:
-	BIT $5204
-	BNE @wait_for_ppu
 
 	; make nametable visible to CPU
     LDA     #$02
@@ -10512,12 +10518,17 @@ LAB_E9F0:
 LAB_E9FF:
 	LDY	#(SCREEN_WIDTH-1)			; set number of columns to clear
 	JSR	LAB_E9F0		; fetch a screen address
+
+	LDA LAB_E1          ; check if it's safe to write without switching mode
+	BNE @clear_lines
+
 	; make nametable visible to CPU
     LDA     #$02
 	STA 	LAB_DF
     STA     $5104
-LAB_EA07:
+@clear_lines:
 	LDA	#' '			; set [SPACE]
+LAB_EA07:
 	STA	(LAB_D1),Y		; clear character in current screen line
 	DEY				; decrement index
 	BPL	LAB_EA07		; loop if more to do
@@ -10540,7 +10551,7 @@ LAB_EA07:
 
 ;************************************************************************************
 ;
-; print character A and colour X
+; print character A
 
 LAB_EA13:
 	TAY				; copy the character
@@ -10551,15 +10562,18 @@ LAB_EA13:
 
 ;************************************************************************************
 ;
-; save the character and colour to the screen @ the cursor
+; save the character to the screen @ the cursor
 
 LAB_EA1C:
 	LDY	LAB_D3		; get the cursor column
 	STA LAB_E0
+	LDA LAB_E1		; check if safe to write without changing mode
+	BNE @write_char
 	; make nametable visible to CPU
     LDA     #$02
 	STA 	LAB_DF
     STA     $5104
+@write_char:
 	LDA LAB_E0
 	STA	(LAB_D1),Y		; save the character from current screen line
 	; make nametable visible to PPU
@@ -10609,7 +10623,8 @@ LAB_EA5C:
 	EOR	#$80			; toggle b7 of character under cursor
 	JSR	LAB_EA1C		; save the character and colour to the screen @ the cursor
 LAB_EA61:
-	JSR	LAB_EA87		; scan the keyboard and controllers
+	JSR	LAB_EA87	; scan the keyboard and controllers on bottom scanline IRQ only
+
 	PLA				; pull Y
 	TAY				; restore Y
 	PLA				; pull X
@@ -10621,6 +10636,57 @@ LAB_EA61:
 	PLA				; restore A
 
 	RTI
+
+;************************************************************************************
+; New IRQ vector:
+
+irq_vector:
+	PHA				; save A
+	TXA				; copy X
+	PHA				; save X
+	TYA				; copy Y
+	PHA				; save Y
+
+	;acknowledge raster IRQ
+    LDA $5204
+
+	LDA 	#$01
+	EOR  	LAB_E1  ; toggle bit that indicates which IRQ to run next
+	STA		LAB_E1
+	BNE		@bottom_scanline_next
+
+	LDA		#TOP_SCANLINE_IRQ
+	BNE		@set_scanline ; branch always, since TOP_SCANLINE_IRQ can't be 0
+
+	; Controller code based on https://wiki.nesdev.org/w/index.php?title=Controller_reading_code
+    LDA #$01
+    STA JOYPAD1
+    STA LAB_DE  ; player 2's buttons double as a ring counter
+    LSR a         ; now A is 0
+    STA JOYPAD1
+@joy_loop:
+    LDA JOYPAD1
+	LSR a
+    ROL LAB_DD    ; Carry -> bit 0; bit 7 -> Carry
+    LDA JOYPAD2     ; Repeat
+	LSR a
+    ROL LAB_DE    ; Carry -> bit 0; bit 7 -> Carry
+    BCC @joy_loop
+
+@bottom_scanline_next:
+	LDA		#BOTTOM_SCANLINE_IRQ
+@set_scanline:
+	STA		$5203
+
+	PLA				; pull Y
+	TAY				; restore Y
+	PLA				; pull X
+	TAX				; restore X
+	PLA				; restore A
+
+	RTI
+
+
 
 ;************************************************************************************
 ;
@@ -10652,21 +10718,6 @@ JOYPAD1 = $4016
 JOYPAD2 = $4017
 
 LAB_EA87:
-	; Controller code based on https://wiki.nesdev.org/w/index.php?title=Controller_reading_code
-    LDA #$01
-    STA JOYPAD1
-    STA LAB_DE  ; player 2's buttons double as a ring counter
-    LSR a         ; now A is 0
-    STA JOYPAD1
-@joy_loop:
-    LDA JOYPAD1
-	LSR a
-    ROL LAB_DD    ; Carry -> bit 0; bit 7 -> Carry
-    LDA JOYPAD2     ; Repeat
-	LSR a
-    ROL LAB_DE    ; Carry -> bit 0; bit 7 -> Carry
-    BCC @joy_loop
-
 	; Read from keyboard:
 
 	LDA	#$00			; clear A
@@ -10682,15 +10733,14 @@ LAB_EA87:
 	LDA #$05	; reset code
 	STA $4016   ; reset keyboard scan to row 0, column 0
 key_row_scan_loop:
-	LDX	#$08	; set the column count
     LDA #$04   ; "next row" code
 	STA $4016  ; select column 0, next row if not just reset
-	TXA
 	LDX #$0a
 @wait_for_row:
 	DEX
 	BNE @wait_for_row
-	TAX
+
+	LDX	#$08	; set the column count
 
 	LDA $4017  ; read column 0 data
 
@@ -10709,6 +10759,17 @@ key_row_scan_loop:
 	ASL a
 	AND #$f0 ; knock off bits we don't care about
 	ORA LAB_DA ; join it with the bits from col 0
+
+	CMP #$FF   ; check if any keys were pressed for this row
+	BNE column_scan_loop
+
+	; No keys pressed so let's jump to the next row (if there is one)
+	TYA
+	ADC #$07   ; increment y by one row (7 + 1 for the carry set by the compare above)
+	TAY
+	CPY	#(keyboard_mapping_size-1)	; compare with max
+	BCS	done_with_scans		; exit loop if >= max
+	BCC key_row_scan_loop
 
 column_scan_loop:
 	LSR
@@ -10736,8 +10797,8 @@ restore_row:
 
 done_with_column:
 	INY				; increment key count
-	CPY	#keyboard_mapping_size	; compare with max+1
-	BCS	done_with_scans		; exit loop if >= max+1
+	CPY	#(keyboard_mapping_size-1)	; compare with max
+	BCS	done_with_scans		; exit loop if >= max
 
 	DEX ; decrement column count
 	BNE column_scan_loop
@@ -14565,9 +14626,14 @@ LAB_FCE2:
 	LDA #$C0
 	STA $4017
 
-	; No scanline IRQs
-	LDA #$00
+	; enable IRQ on specified scanline
+    LDA #TOP_SCANLINE_IRQ
+    STA $5203
+    LDA #$80
 	STA $5204
+
+	LDA #$00
+	STA LAB_E1
 
 	LDX	#$FF		; set X for stack
 	TXS				; clear stack
@@ -14736,7 +14802,7 @@ LAB_FD27:
 ; kernal vectors
 
 LAB_FD30:
-	.word	LAB_EA31		; LAB_0314	IRQ vector
+	.word	irq_vector		; LAB_0314	IRQ vector
 	.word	LAB_FE66		; LAB_0316	BRK vector
 	.word	LAB_EA31		; LAB_0318	NMI vector
 	.word	LAB_F34A		; LAB_031A	open a logical file
@@ -15780,7 +15846,7 @@ LAB_FFF3:
 ;LAB_FFFA
 	.word	LAB_FF48		; NMI vector
 	.word	LAB_FCE2		; RESET vector
-	.word	LAB_FF48		; IRQ vector
+	.word	irq_vector		; IRQ vector
 
 	.END
 
