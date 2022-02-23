@@ -59,8 +59,8 @@
 SCREEN_WIDTH = $20
 SCREEN_HEIGHT = $1E
 
-TOP_SCANLINE_IRQ = 8
-BOTTOM_SCANLINE_IRQ = 232
+TOP_SCANLINE_IRQ = 1
+BOTTOM_SCANLINE_IRQ = 236
 
 LAB_00	= $00			; 6510 I/O port data direction register
 					; bit	default
@@ -9478,14 +9478,6 @@ LAB_E5A0:
 	STA	LAB_9A		; save the output device number
 	LDA	#$00			; set the keyboard as the input device
 	STA	LAB_99		; save the input device number
-
-	LDX	#$2F			; set the count/index
-LAB_E5AA:
-	LDA	LAB_ECB9-1,X	; get a vic ii chip initialisation value
-	STA	LAB_D000-1,X	; save it to the vic ii chip
-	DEX				; decrement the count/index
-	BNE	LAB_E5AA		; loop if more to do
-
 	RTS
 
 
@@ -10356,14 +10348,9 @@ LAB_E922:
 
 	INC	LAB_D6		; increment the cursor row
 	INC	LAB_02A5		; increment screen row marker
-	LDA	#$7F			; set keyboard column c7
-	STA	LAB_DC00		; save VIA 1 DRA, keyboard column drive
-	LDA	LAB_DC01		; read VIA 1 DRB, keyboard row port
-	CMP	#$FB			; compare with row r2 active, [CTL]
-	PHP				; save status
-	LDA	#$7F			; set keyboard column c7
-	STA	LAB_DC00		; save VIA 1 DRA, keyboard column drive
-	PLP				; restore status
+
+	; TODO: Add check for CTRL to do a scroll delay
+	LDA #$01
 	BNE	LAB_E956		; skip delay if ??
 
 					; first time round the inner loop X will be $16
@@ -10929,8 +10916,6 @@ LAB_EB26:
 	INX				; increment the index
 	STX	LAB_C6		; save the keyboard buffer index
 LAB_EB42:
-	LDA	#$7F			; enable column 7 for the stop key
-	STA	LAB_DC00		; save VIA 1 DRA, keyboard column drive
 	RTS
 
 
@@ -11324,14 +11309,7 @@ LAB_ED7A:
 	JSR	LAB_EE97		; set the serial data out high
 LAB_ED7D:
 	JSR	LAB_EE85		; set the serial clock out high
-	NOP				; waste ..
-	NOP				; .. a ..
-	NOP				; .. cycle ..
-	NOP				; .. or two
-	LDA	LAB_DD00		; read VIA 2 DRA, serial port and video address
-	AND	#$DF			; mask xx0x xxxx, set the serial data out high
-	ORA	#$10			; mask xxx1 xxxx, set the serial clock out low
-	STA	LAB_DD00		; save VIA 2 DRA, serial port and video address
+	; Deleted some pointless writes to C64 I/O here
 	DEC	LAB_A5		; decrement the serial bus bit count
 	BNE	LAB_ED66		; loop if not all done
 
@@ -13294,13 +13272,12 @@ LAB_F6BC:
 	STA $4016   ; reset keyboard scan to row 0, column 0
     LDA #$04   ; "next row" code
 	STA $4016  ; select column 0, next row if not just reset
-	LDX #$0a
-@wait_for_row:
-	DEX
-	BNE @wait_for_row
-
 	LDA #$06   ; "next column" code
 	STA $4016  ; select column 1
+	LDX #$0a
+@wait_for_column:
+	DEX
+	BNE @wait_for_column
 	LDA $4017  ; read column 1 data
 	ASL
 	ASL
