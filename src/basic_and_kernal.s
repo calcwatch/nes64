@@ -60,6 +60,7 @@ SCREEN_WIDTH = $20
 SCREEN_HEIGHT = $1E
 
 TOP_SCANLINE_IRQ = 1
+SECOND_SCANLINE_IRQ = 200 
 BOTTOM_SCANLINE_IRQ = 236
 
 LAB_00	= $00			; 6510 I/O port data direction register
@@ -767,7 +768,7 @@ LAB_DE = $DE ; controller 2 inputs
 LAB_DF = $DF ; $5104 register's status
 LAB_E0 = $E0 ; screen char read scratch space
 
-LAB_E1 = $E1 ; 1 = upper scanline triggered, 0 = lower scanline triggered
+LAB_E1 = $E1 ; Flag indicating next scanline IRQ
 
 LAB_F3	= $F3			; colour RAM pointer low byte
 LAB_F4	= $F4			; colour RAM pointer high byte
@@ -9521,6 +9522,9 @@ LAB_E5CD:
 					; this disables both the cursor flash and the screen scroll
 					; while there are characters in the keyboard buffer
 	BEQ	LAB_E5CD		; loop if the buffer is empty
+@wait_for_bottom_irq:
+	LDA LAB_E1
+	BNE @wait_for_bottom_irq
 
 	SEI				; disable the interrupts
 
@@ -10610,8 +10614,6 @@ LAB_EA5C:
 	EOR	#$80			; toggle b7 of character under cursor
 	JSR	LAB_EA1C		; save the character and colour to the screen @ the cursor
 LAB_EA61:
-	JSR	LAB_EA87	; scan the keyboard and controllers on bottom scanline IRQ only
-
 	PLA				; pull Y
 	TAY				; restore Y
 	PLA				; pull X
@@ -10637,17 +10639,19 @@ irq_vector:
 	;acknowledge raster IRQ
     LDA $5204
 
-	LDA 	#$01
-	EOR  	LAB_E1  ; toggle bit that indicates which IRQ to run next
+	LDA		LAB_E1
+	BNE		check_for_1_or_2
+top_scanline_irq:
+	LDA 	#$01	; set up next IRQ 
 	STA		LAB_E1
-	BNE		@bottom_scanline_next
-
-	LDA		#TOP_SCANLINE_IRQ
-	BNE		@set_scanline ; branch always, since TOP_SCANLINE_IRQ can't be 0
-
+	LDA		#SECOND_SCANLINE_IRQ
+	BNE		set_scanline ; branch always
+check_for_1_or_2:
+	CMP		#$01
+	BNE		bottom_scanline_irq
+second_scanline_irq:
 	; Controller code based on https://wiki.nesdev.org/w/index.php?title=Controller_reading_code
-    LDA #$01
-    STA JOYPAD1
+    STA JOYPAD1 ; A is already set to 1
     STA LAB_DE  ; player 2's buttons double as a ring counter
     LSR a         ; now A is 0
     STA JOYPAD1
@@ -10660,9 +10664,18 @@ irq_vector:
     ROL LAB_DE    ; Carry -> bit 0; bit 7 -> Carry
     BCC @joy_loop
 
-@bottom_scanline_next:
+	JSR	LAB_EA87	; scan the keyboard
+
+	LDA #$02 ; set up next IRQ
+	STA		LAB_E1
 	LDA		#BOTTOM_SCANLINE_IRQ
-@set_scanline:
+	BNE		set_scanline ; branch always, since TOP_SCANLINE_IRQ can't be 0
+
+bottom_scanline_irq:
+	LDA #$00 ; set up next IRQ
+	STA		LAB_E1
+	LDA		#TOP_SCANLINE_IRQ
+set_scanline:
 	STA		$5203
 
 	PLA				; pull Y
