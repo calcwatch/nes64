@@ -59,6 +59,9 @@
 SCREEN_WIDTH = $20
 SCREEN_HEIGHT = $1E
 
+TOP_SCANLINE_IRQ = 1
+SECOND_SCANLINE_IRQ = 200 
+BOTTOM_SCANLINE_IRQ = 236
 
 LAB_00	= $00			; 6510 I/O port data direction register
 					; bit	default
@@ -764,6 +767,8 @@ LAB_DE = $DE ; controller 2 inputs
 
 LAB_DF = $DF ; $5104 register's status
 LAB_E0 = $E0 ; screen char read scratch space
+
+LAB_E1 = $E1 ; Flag indicating next scanline IRQ
 
 LAB_F3	= $F3			; colour RAM pointer low byte
 LAB_F4	= $F4			; colour RAM pointer high byte
@@ -9474,14 +9479,6 @@ LAB_E5A0:
 	STA	LAB_9A		; save the output device number
 	LDA	#$00			; set the keyboard as the input device
 	STA	LAB_99		; save the input device number
-
-	LDX	#$2F			; set the count/index
-LAB_E5AA:
-	LDA	LAB_ECB9-1,X	; get a vic ii chip initialisation value
-	STA	LAB_D000-1,X	; save it to the vic ii chip
-	DEX				; decrement the count/index
-	BNE	LAB_E5AA		; loop if more to do
-
 	RTS
 
 
@@ -9525,14 +9522,17 @@ LAB_E5CD:
 					; this disables both the cursor flash and the screen scroll
 					; while there are characters in the keyboard buffer
 	BEQ	LAB_E5CD		; loop if the buffer is empty
+@wait_for_bottom_irq:
+	LDA LAB_E1
+	BNE @wait_for_bottom_irq
 
 	SEI				; disable the interrupts
+
 	LDA	LAB_CF		; get the cursor blink phase
 	BEQ	LAB_E5E7		; if cursor phase skip the overwrite
 
 					; else it is the character phase
 	LDA	LAB_CE		; get the character under the cursor
-	LDX	LAB_0287		; get the colour under the cursor
 	LDY	#$00			; clear Y
 	STY	LAB_CF		; clear the cursor blink phase
 	JSR	LAB_EA13		; print character A and colour X
@@ -9726,7 +9726,6 @@ LAB_E699:
 
 	DEC	LAB_D8		; else decrement the insert count
 LAB_E69F:
-	LDX	LAB_0286		; get the current colour code
 	JSR	LAB_EA13		; print character A and colour X
 	JSR	LAB_E6B6		; advance the cursor
 
@@ -9899,6 +9898,12 @@ LAB_E74C:
 	BNE	LAB_E759		;.
 
 	JSR	LAB_E701		; back onto the previous line if possible
+
+	; make nametable visible to CPU
+    LDA     #$02
+	STA 	LAB_DF
+    STA     $5104
+
 	JMP	LAB_E773		;.
 
 LAB_E759:
@@ -10347,14 +10352,9 @@ LAB_E922:
 
 	INC	LAB_D6		; increment the cursor row
 	INC	LAB_02A5		; increment screen row marker
-	LDA	#$7F			; set keyboard column c7
-	STA	LAB_DC00		; save VIA 1 DRA, keyboard column drive
-	LDA	LAB_DC01		; read VIA 1 DRB, keyboard row port
-	CMP	#$FB			; compare with row r2 active, [CTL]
-	PHP				; save status
-	LDA	#$7F			; set keyboard column c7
-	STA	LAB_DC00		; save VIA 1 DRA, keyboard column drive
-	PLP				; restore status
+
+	; TODO: Add check for CTRL to do a scroll delay
+	LDA #$01
 	BNE	LAB_E956		; skip delay if ??
 
 					; first time round the inner loop X will be $16
@@ -10509,12 +10509,17 @@ LAB_E9F0:
 LAB_E9FF:
 	LDY	#(SCREEN_WIDTH-1)			; set number of columns to clear
 	JSR	LAB_E9F0		; fetch a screen address
+
+	LDA LAB_E1          ; check if it's safe to write without switching mode
+	BNE @clear_lines
+
 	; make nametable visible to CPU
     LDA     #$02
 	STA 	LAB_DF
     STA     $5104
-LAB_EA07:
+@clear_lines:
 	LDA	#' '			; set [SPACE]
+LAB_EA07:
 	STA	(LAB_D1),Y		; clear character in current screen line
 	DEY				; decrement index
 	BPL	LAB_EA07		; loop if more to do
@@ -10537,7 +10542,7 @@ LAB_EA07:
 
 ;************************************************************************************
 ;
-; print character A and colour X
+; print character A
 
 LAB_EA13:
 	TAY				; copy the character
@@ -10548,15 +10553,18 @@ LAB_EA13:
 
 ;************************************************************************************
 ;
-; save the character and colour to the screen @ the cursor
+; save the character to the screen @ the cursor
 
 LAB_EA1C:
 	LDY	LAB_D3		; get the cursor column
 	STA LAB_E0
+	LDA LAB_E1		; check if safe to write without changing mode
+	BNE @write_char
 	; make nametable visible to CPU
     LDA     #$02
 	STA 	LAB_DF
     STA     $5104
+@write_char:
 	LDA LAB_E0
 	STA	(LAB_D1),Y		; save the character from current screen line
 	; make nametable visible to PPU
@@ -10569,7 +10577,7 @@ LAB_EA1C:
 
 ;************************************************************************************
 ;
-; IRQ vector
+; NMI vector (formerly the C64's IRQ vector)
 
 LAB_EA31:
 	JSR	LAB_FFEA		; increment the real time clock
@@ -10606,7 +10614,6 @@ LAB_EA5C:
 	EOR	#$80			; toggle b7 of character under cursor
 	JSR	LAB_EA1C		; save the character and colour to the screen @ the cursor
 LAB_EA61:
-	JSR	LAB_EA87		; scan the keyboard and controllers
 	PLA				; pull Y
 	TAY				; restore Y
 	PLA				; pull X
@@ -10618,6 +10625,68 @@ LAB_EA61:
 	PLA				; restore A
 
 	RTI
+
+;************************************************************************************
+; New IRQ vector:
+
+irq_vector:
+	PHA				; save A
+	TXA				; copy X
+	PHA				; save X
+	TYA				; copy Y
+	PHA				; save Y
+
+	;acknowledge raster IRQ
+    LDA $5204
+
+	LDA		LAB_E1
+	BNE		check_for_1_or_2
+top_scanline_irq:
+	LDA 	#$01	; set up next IRQ 
+	STA		LAB_E1
+	LDA		#SECOND_SCANLINE_IRQ
+	BNE		set_scanline ; branch always
+check_for_1_or_2:
+	CMP		#$01
+	BNE		bottom_scanline_irq
+second_scanline_irq:
+	; Controller code based on https://wiki.nesdev.org/w/index.php?title=Controller_reading_code
+    STA JOYPAD1 ; A is already set to 1
+    STA LAB_DE  ; player 2's buttons double as a ring counter
+    LSR a         ; now A is 0
+    STA JOYPAD1
+@joy_loop:
+    LDA JOYPAD1
+	LSR a
+    ROL LAB_DD    ; Carry -> bit 0; bit 7 -> Carry
+    LDA JOYPAD2     ; Repeat
+	LSR a
+    ROL LAB_DE    ; Carry -> bit 0; bit 7 -> Carry
+    BCC @joy_loop
+
+	JSR	LAB_EA87	; scan the keyboard
+
+	LDA #$02 ; set up next IRQ
+	STA		LAB_E1
+	LDA		#BOTTOM_SCANLINE_IRQ
+	BNE		set_scanline ; branch always, since TOP_SCANLINE_IRQ can't be 0
+
+bottom_scanline_irq:
+	LDA #$00 ; set up next IRQ
+	STA		LAB_E1
+	LDA		#TOP_SCANLINE_IRQ
+set_scanline:
+	STA		$5203
+
+	PLA				; pull Y
+	TAY				; restore Y
+	PLA				; pull X
+	TAX				; restore X
+	PLA				; restore A
+
+	RTI
+
+
 
 ;************************************************************************************
 ;
@@ -10649,21 +10718,6 @@ JOYPAD1 = $4016
 JOYPAD2 = $4017
 
 LAB_EA87:
-	; Controller code based on https://wiki.nesdev.org/w/index.php?title=Controller_reading_code
-    LDA #$01
-    STA JOYPAD1
-    STA LAB_DE  ; player 2's buttons double as a ring counter
-    LSR a         ; now A is 0
-    STA JOYPAD1
-@joy_loop:
-    LDA JOYPAD1
-	LSR a
-    ROL LAB_DD    ; Carry -> bit 0; bit 7 -> Carry
-    LDA JOYPAD2     ; Repeat
-	LSR a
-    ROL LAB_DE    ; Carry -> bit 0; bit 7 -> Carry
-    BCC @joy_loop
-
 	; Read from keyboard:
 
 	LDA	#$00			; clear A
@@ -10679,15 +10733,12 @@ LAB_EA87:
 	LDA #$05	; reset code
 	STA $4016   ; reset keyboard scan to row 0, column 0
 key_row_scan_loop:
-	LDX	#$08	; set the column count
     LDA #$04   ; "next row" code
 	STA $4016  ; select column 0, next row if not just reset
-	TXA
-	LDX #$10
+	LDX #$0a
 @wait_for_row:
 	DEX
 	BNE @wait_for_row
-	TAX
 
 	LDA $4017  ; read column 0 data
 
@@ -10698,7 +10749,14 @@ key_row_scan_loop:
 
 	LDA #$06   ; "next column" code
 	STA $4016  ; select column 1
+	LDX #$0a
+@wait_for_column:
+	DEX
+	BNE @wait_for_column
+
 	LDA $4017  ; read column 1 data
+
+	LDX	#$08	; set the column count
 
 	; do stuff with col 1
 	ASL a
@@ -10706,6 +10764,17 @@ key_row_scan_loop:
 	ASL a
 	AND #$f0 ; knock off bits we don't care about
 	ORA LAB_DA ; join it with the bits from col 0
+
+	CMP #$FF   ; check if any keys were pressed for this row
+	BNE column_scan_loop
+
+	; No keys pressed so let's jump to the next row (if there is one)
+	TYA
+	ADC #$07   ; increment y by one row (7 + 1 for the carry set by the compare above)
+	TAY
+	CPY	#(keyboard_mapping_size-1)	; compare with max
+	BCS	done_with_scans		; exit loop if >= max
+	BCC key_row_scan_loop
 
 column_scan_loop:
 	LSR
@@ -10733,8 +10802,8 @@ restore_row:
 
 done_with_column:
 	INY				; increment key count
-	CPY	#keyboard_mapping_size	; compare with max+1
-	BCS	done_with_scans		; exit loop if >= max+1
+	CPY	#(keyboard_mapping_size-1)	; compare with max
+	BCS	done_with_scans		; exit loop if >= max
 
 	DEX ; decrement column count
 	BNE column_scan_loop
@@ -10860,8 +10929,6 @@ LAB_EB26:
 	INX				; increment the index
 	STX	LAB_C6		; save the keyboard buffer index
 LAB_EB42:
-	LDA	#$7F			; enable column 7 for the stop key
-	STA	LAB_DC00		; save VIA 1 DRA, keyboard column drive
 	RTS
 
 
@@ -11255,14 +11322,7 @@ LAB_ED7A:
 	JSR	LAB_EE97		; set the serial data out high
 LAB_ED7D:
 	JSR	LAB_EE85		; set the serial clock out high
-	NOP				; waste ..
-	NOP				; .. a ..
-	NOP				; .. cycle ..
-	NOP				; .. or two
-	LDA	LAB_DD00		; read VIA 2 DRA, serial port and video address
-	AND	#$DF			; mask xx0x xxxx, set the serial data out high
-	ORA	#$10			; mask xxx1 xxxx, set the serial clock out low
-	STA	LAB_DD00		; save VIA 2 DRA, serial port and video address
+	; Deleted some pointless writes to C64 I/O here
 	DEC	LAB_A5		; decrement the serial bus bit count
 	BNE	LAB_ED66		; loop if not all done
 
@@ -13225,13 +13285,12 @@ LAB_F6BC:
 	STA $4016   ; reset keyboard scan to row 0, column 0
     LDA #$04   ; "next row" code
 	STA $4016  ; select column 0, next row if not just reset
-	LDX #$10
-@wait_for_row:
-	DEX
-	BNE @wait_for_row
-
 	LDA #$06   ; "next column" code
 	STA $4016  ; select column 1
+	LDX #$0a
+@wait_for_column:
+	DEX
+	BNE @wait_for_column
 	LDA $4017  ; read column 1 data
 	ASL
 	ASL
@@ -14562,11 +14621,14 @@ LAB_FCE2:
 	LDA #$C0
 	STA $4017
 
-	; enable IRQ on scanline 239
-	LDA #239
-	STA $5203
-	LDA #$80
+	; enable IRQ on specified scanline
+    LDA #TOP_SCANLINE_IRQ
+    STA $5203
+    LDA #$80
 	STA $5204
+
+	LDA #$00
+	STA LAB_E1
 
 	LDX	#$FF		; set X for stack
 	TXS				; clear stack
@@ -14643,12 +14705,16 @@ palette_loop:
 	STA     $5104
 
 
-
-	;STX	LAB_D016		; read the horizontal fine scroll and control register
 	JSR	LAB_FDA3		; initialise SID, CIA and IRQ
 	JSR	LAB_FD50		; RAM test and find RAM end
 	JSR	LAB_FD15		; restore default I/O vectors
 	JSR	LAB_FF5B		; initialise VIC and screen editor
+
+
+	LDA #$80
+	STA $2000 ; Enable NMI on vblank
+
+
  	CLI				; enable the interrupts
 	JMP	(LAB_A000)		; execute BASIC
 
@@ -14731,9 +14797,9 @@ LAB_FD27:
 ; kernal vectors
 
 LAB_FD30:
-	.word	LAB_EA31		; LAB_0314	IRQ vector
+	.word	irq_vector		; LAB_0314	IRQ vector
 	.word	LAB_FE66		; LAB_0316	BRK vector
-	.word	LAB_FE47		; LAB_0318	NMI vector
+	.word	LAB_EA31		; LAB_0318	NMI vector
 	.word	LAB_F34A		; LAB_031A	open a logical file
 	.word	LAB_F291		; LAB_031C	close a specified logical file
 	.word	LAB_F20E		; LAB_031E	open channel for input
@@ -14950,32 +15016,6 @@ LAB_FE3C:
 
 ;************************************************************************************
 ;
-; NMI vector
-
-LAB_FE43:
-	SEI				; disable the interrupts
-	JMP	(LAB_0318)		; do NMI vector
-
-
-;************************************************************************************
-;
-; NMI handler
-
-LAB_FE47:
-	PHA				; save A
-	TXA				; copy X
-	PHA				; save X
-	TYA				; copy Y
-	PHA				; save Y
-
-LAB_FE5E:
-	JSR	LAB_F6BC		; increment real time clock
-	JSR	LAB_FFE1		; scan stop key
-	BNE	LAB_FE72		; if not [STOP] restore registers and exit interrupt
-
-
-;************************************************************************************
-;
 ; user function default vector
 ; BRK handler
 
@@ -15139,7 +15179,7 @@ LAB_FF43:
 
 ;************************************************************************************
 ;
-; IRQ vector
+; NMI vector (formerly the C64 IRQ vector) -- triggers on each vblank
 
 LAB_FF48:
 	PHA				; save A
@@ -15149,11 +15189,6 @@ LAB_FF48:
 	PHA				; save Y
 	TSX				; copy stack pointer
 
-	;acknowledge raster IRQ
-	lda $5204
-	; acknowledge timer IRQ
-	lda $5209
-
 	LDA	LAB_0100+4,X	; get stacked status register
 	AND	#$10			; mask BRK flag
 	BEQ	LAB_FF58		; branch if not BRK
@@ -15161,7 +15196,7 @@ LAB_FF48:
 	JMP	(LAB_0316)		; else do BRK vector (iBRK)
 
 LAB_FF58:
-	JMP	(LAB_0314)		; do IRQ vector (iIRQ)
+	JMP	(LAB_0318)		; do NMI vector
 
 
 ;************************************************************************************
@@ -15804,9 +15839,9 @@ LAB_FFF3:
 .segment "VECTORS"
 
 ;LAB_FFFA
-	.word	LAB_FE43		; NMI vector
+	.word	LAB_FF48		; NMI vector
 	.word	LAB_FCE2		; RESET vector
-	.word	LAB_FF48		; IRQ vector
+	.word	irq_vector		; IRQ vector
 
 	.END
 
