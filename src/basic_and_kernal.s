@@ -14719,8 +14719,10 @@ palette_loop:
 	JMP	(LAB_A000)		; execute BASIC
 
 palette_data:
-        .byte $12,$31,$32,$22,$12,$31,$32,$22,$12,$31,$32,$22,$12,$31,$32,$22  ; background palette data
-        .byte $12,$31,$32,$22,$12,$31,$32,$22,$12,$31,$32,$22,$12,$31,$32,$22  ; sprite palette data
+; only one unique palette for background and sprites for now
+.repeat 8
+    .byte $12,$31,$22,$32
+.endrep
 
 
 ;************************************************************************************
