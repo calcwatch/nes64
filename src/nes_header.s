@@ -1,4 +1,4 @@
-.import NES_MAPPER, NES_PRG_BANKS, NES_CHR_BANKS, NES_MIRRORING
+.import NES_MAPPER, NES_PRG_BANKS, NES_CHR_BANKS, NES_MIRRORING, NES_PRG_RAM
 
 .segment        "HEADER"
         .byte   "NES",$1a                               ; "NES"^Z
@@ -8,5 +8,6 @@
         .byte   (<NES_MAPPER & $f0) | $08               ; ines map  - Specifies the NES mapper used and declares this as a NES 2.0 header
         .byte   0                                       ; Mapper MSB/Submapper
         .byte   0                                       ; PRG-ROM/CHR-ROM size MSB 
-        .byte   10                                      ; 64 kB RAM (64 << 10)
-        .byte   0,0,0,0,0                               ; Unused settings
+        .byte   <NES_PRG_RAM                            ; RAM size = 64 ** NES_PRG_RAM
+        .byte   0,0,0,0                                 ; Unused settings
+        .byte   $23                                     ; Uses Family BASIC keybaord
