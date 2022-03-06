@@ -60,7 +60,7 @@ SCREEN_WIDTH = $20
 SCREEN_HEIGHT = $1E
 
 TOP_SCANLINE_IRQ = 1
-SECOND_SCANLINE_IRQ = 200 
+SECOND_SCANLINE_IRQ = 190
 BOTTOM_SCANLINE_IRQ = 236
 
 LAB_00	= $00			; 6510 I/O port data direction register
@@ -10764,6 +10764,10 @@ key_row_scan_loop:
 	ASL a
 	AND #$f0 ; knock off bits we don't care about
 	ORA LAB_DA ; join it with the bits from col 0
+
+    BEQ done_with_scans ; unlikely that all 8 keys were pressed;
+                        ; more likely that the keyboard is disabled, so the
+                        ; scan should be aborted
 
 	CMP #$FF   ; check if any keys were pressed for this row
 	BNE column_scan_loop
