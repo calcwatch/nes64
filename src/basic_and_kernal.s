@@ -9564,8 +9564,8 @@ LAB_E5FE:
     STY LAB_D0      ; input from keyboard or screen, $xx = screen,
                     ; $00 = keyboard
 
-    ;  Switch to using onboard PPU VRAM, page 0
-    LDA     #$00
+    ;  Switch to fill mode
+    LDA     #$FF
     STA     $5105
 
     ; make nametable visible to CPU
@@ -9584,7 +9584,7 @@ LAB_E60F:
     LDA     #$00
     STA     $5104
 
-    ;  Switch PPU back to expansion ram
+    ;  Switch PPU back to expansion RAM
     LDA     #%10101010
     STA     $5105
 
@@ -9628,8 +9628,8 @@ LAB_E632:
 LAB_E63A:
     LDY LAB_D3      ; get the cursor column
 
-    ;  Switch PPU back to its own VRAM
-    LDA     #$00
+    ;  Switch PPU to fill mode
+    LDA     #$FF
     STA     $5105
     ; make nametable visible to CPU
     LDA     #$02
@@ -9644,7 +9644,7 @@ LAB_E63A:
     STA     LAB_DF
     STA     $5104
 
-    ;  Switch PPU back to expansion ram
+    ;  Switch PPU back to expansion RAM
     LDA     #%10101010
     STA     $5105
     LDA LAB_D7
@@ -9914,8 +9914,8 @@ LAB_E74C:
 
     JSR LAB_E701        ; back onto the previous line if possible
 
-    ;  Switch PPU back to its own VRAM
-    LDA     #$00
+    ;  Switch PPU back to fill mode
+    LDA     #$FF
     STA     $5105
 
     ; make nametable visible to CPU
@@ -9932,8 +9932,8 @@ LAB_E759:
     DEY             ; decrement index to previous character
     STY LAB_D3      ; save the cursor column
 
-    ;  Switch PPU back to its own VRAM
-    LDA     #$00
+    ;  Switch PPU back to fill mode
+    LDA     #$FF
     STA     $5105
 
     ; make nametable visible to CPU
@@ -9961,7 +9961,7 @@ LAB_E773:
     STA     LAB_DF
     STA     $5104
 
-    ;  Switch PPU back to expansion ram
+    ;  Switch PPU back to expansion RAM
     LDA     #%10101010
     STA     $5105
 
@@ -10065,8 +10065,8 @@ LAB_E7EA:
 
     LDY LAB_D5      ; get current screen line length
 
-    ;  Switch PPU back to its own VRAM
-    LDA     #$00
+    ;  Switch PPU back to fill mode
+    LDA     #$FF
     STA     $5105
 
     ; make nametable visible to CPU
@@ -10082,7 +10082,7 @@ LAB_E7EA:
     STA     LAB_DF
     STA     $5104
 
-    ;  Switch PPU back to expansion ram
+    ;  Switch PPU back to expansion RAM
     LDA     #%10101010
     STA     $5105
 
@@ -10102,8 +10102,8 @@ LAB_E7FE:
 LAB_E805:
     LDY LAB_D5      ; get current screen line length
 
-    ;  Switch PPU back to its own VRAM
-    LDA     #$00
+    ;  Switch PPU back to fill mode
+    LDA     #$FF
     STA     $5105
 
     ; make nametable visible to CPU
@@ -10127,7 +10127,7 @@ LAB_E80A:
     STA     LAB_DF
     STA     $5104
 
-    ;  Switch PPU back to expansion ram
+    ;  Switch PPU back to expansion RAM
     LDA     #%10101010
     STA     $5105
 
@@ -10512,8 +10512,8 @@ LAB_E9C8:
     STA LAB_AD      ; save next/previous line pointer high byte
     LDY #(SCREEN_WIDTH-1)           ; set the column count
 
-    ;  Switch PPU back to its own VRAM
-    LDA     #$00
+    ;  Switch PPU back to fill mode
+    LDA     #$FF
     STA     $5105
 
     ; make nametable visible to CPU
@@ -10533,7 +10533,7 @@ LAB_E9D4:
     STA     LAB_DF
     STA     $5104
 
-    ;  Switch PPU back to expansion ram
+    ;  Switch PPU back to expansion RAM
     LDA     #%10101010
     STA     $5105
     RTS
@@ -10564,8 +10564,8 @@ LAB_E9FF:
     LDA LAB_E1          ; check if it's safe to write without switching mode
     BNE @clear_lines
 
-    ;  Switch PPU back to its own VRAM
-    LDA     #$00
+    ;  Switch PPU back to fill mode
+    LDA     #$FF
     STA     $5105
 
     ; make nametable visible to CPU
@@ -10584,7 +10584,7 @@ LAB_EA07:
     STA     LAB_DF
     STA     $5104
 
-    ;  Switch PPU back to expansion ram
+    ;  Switch PPU back to expansion RAM
     LDA     #%10101010
     STA     $5105
     RTS
@@ -10619,8 +10619,8 @@ LAB_EA1C:
     LDA LAB_E1      ; check if safe to write without changing mode
     BNE @write_char
 
-    ;  Switch PPU back to its own VRAM
-    LDA     #$00
+    ;  Switch PPU back to fill mode
+    LDA     #$FF
     STA     $5105
 
     ; make nametable visible to CPU
@@ -10636,7 +10636,7 @@ LAB_EA1C:
     STA     LAB_DF
     STA     $5104
 
-    ;  Switch PPU back to expansion ram
+    ;  Switch PPU back to expansion RAM
     LDA     #%10101010
     STA     $5105
 
@@ -10661,8 +10661,8 @@ LAB_EA31:
     LDY LAB_D3      ; get the cursor column
     LSR LAB_CF      ; shift b0 cursor blink phase into carry
 
-    ;  Switch PPU back to its own VRAM
-    LDA     #$00
+    ;  Switch PPU back to fill mode
+    LDA     #$FF
     STA     $5105
 
     ; enable reading from the screen
@@ -10676,7 +10676,7 @@ LAB_EA31:
     LDA     #$00
     STA     $5104
 
-    ;  Switch PPU back to expansion ram
+    ;  Switch PPU back to expansion RAM
     LDA     #%10101010
     STA     $5105
 
@@ -10699,8 +10699,8 @@ LAB_EA61:
     LDA     LAB_DF  ; restore status of ExRAM visibility prior to IRQ
     BEQ     @enable_exram_nametable
 
-    ; Switch PPU back to its own VRAM
-    LDA     #$00
+    ; Switch PPU back to fill mode
+    LDA     #$FF
     STA     $5105
 
     LDA     LAB_DF
@@ -10709,7 +10709,7 @@ LAB_EA61:
 
 @enable_exram_nametable:
     STA     $5104 ; Make nametable visible to PPU
-    ;  Switch PPU back to expansion ram
+    ;  Switch PPU back to expansion RAM
     LDA     #%10101010
     STA     $5105
 @done_with_irq:
@@ -14764,8 +14764,8 @@ LAB_FCEF:
     STA     $5117  ; PRG ROM bank 1 @ $E000-$FFFF
 
 
-    ;  All nametables point to VRAM
-    LDA     #$00
+    ;  All nametables in fill mode
+    LDA     #$FF
     STA     $5105
 
     ; "clear" first onboard nametable with spaces so it's less obvious when
@@ -14777,16 +14777,7 @@ LAB_FCEF:
     STA $2006    ; write the low byte of $3F00 address
 
     LDA #' '
-    LDX #$00
-    LDY #$04    ; Loop over $400 bytes ($2000-$2400);
-                ; This will run into the attribute table, but that's OK
-                ; since the tile is always color 0 anyway
-@nametable_loop:
-    STA $2007
-    INX
-    BNE @nametable_loop
-    DEY
-    BNE @nametable_loop
+    STA $5106    ; set tile for fill mode
 
     ; set palettes
     LDA #$3F
@@ -14816,7 +14807,7 @@ palette_loop:
     STA     LAB_DF
     STA     $5104
 
-    ;  All nametables point to expansion ram
+    ;  All nametables point to expansion RAM
     LDA     #%10101010
     STA     $5105
 
