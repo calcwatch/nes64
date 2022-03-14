@@ -14,7 +14,9 @@ Then simply run `make` from the root directory. It will create a `rom/` subdirec
 
 ## Current Status
 
-NES 64 has been tested on [FCEUX](https://fceux.com/) 2.6.2 for macOS and [Nintendulator](https://www.qmtpro.com/~nes/nintendulator) 0.985 for 64bit Windows. It hasn't been confirmed to work on hardware yet. To run it on hardware, you'll need [MMC5](https://wiki.nesdev.org/w/index.php/MMC5) mapper support.
+NES 64 has been tested on [FCEUX](https://fceux.com/) 2.6.3 for macOS, [Nintendulator](https://www.qmtpro.com/~nes/nintendulator) 0.985 for 64bit Windows and [Mesen](https://www.mesen.ca/) 0.9.9 for Linux. It _may_ work on BizHawk as well, but I had issues with keyboard support there when I tested it on Linux.
+
+It hasn't been confirmed to work on hardware yet. To run it on hardware, you'll need [MMC5](https://wiki.nesdev.org/w/index.php/MMC5) mapper support and a Family BASIC Keybaord.
 
 You should be able to type and run BASIC programs, but don't expect `POKE`, `PEEK` or `SYS` calls to work as they did on the real Commodore 64. The memory and hardware layouts are totally different.
 
@@ -30,9 +32,9 @@ As an bonus feature, you can inspect the output of NES controllers 1 and 2 with 
 
 The 32x30 character text screen will likely get cropped when displayed on a real TV. In the future, the window size may change to avoid this problem. FCEUX has an option to display the entire screen.
 
-In Nintendulator, you'll see some flickering, especially during scrolling. This likely occurs on hardware as well. This is a side-effect of how the Extended RAM (ExRAM) used for the screen is being shared between the CPU and the PPU. Whenever the PPU is blocked from reading from the RAM, it prints the `@` character repeatedly. This can probably be fixed in the future with smarter read and write scheduling.
+You'll occasionally see some flickering, especially during scrolling. This is a consequence of how the CPU and PPU share the Extended RAM (ExRAM) used for the screen. They can't both read it at the same time, so if a CPU read occurs while the screen is being rendered, the PPU will temporarily outputs blank lines. This can be greatly mitigated in the future by using the PPU's scroll registers to scroll the screen, instead of moving all the characters up one row as it does now.
 
-FCEUX 2.6.2 has [an issue](https://github.com/TASEmulators/fceux/issues/464) with keyboard support for shifted numbers and symbols. For example, nothing happens most of the time when pressing "shift+1" to type "!". To work around this, you can use the CTRL key (the "command" key on Macs) as a replacement for shift. This means that the usual Commodore CTRL key combinations are unavailable. (But many of those are for changing the text color, and that's not supported anyway.)
+If you're going to run NES 64 on FCEUX, please make sure you're on the latest FCEUX version. FCEUX 2.6.2 has an issue with keyboard support for shifted numbers and symbols. For example, nothing happens most of the time when pressing "shift+1" to type "!". This was fixed in 2.6.3, though some macOS keyboard issues remain. (See the [issue ticket](https://github.com/TASEmulators/fceux/issues/464) for details.)
 
 Lines of BASIC code can't span more than one screen line like on the Commodore 64. This may be fixed in the future.
 
@@ -40,7 +42,9 @@ You cannot use the CTRL key to slow down scrolling text output in BASIC. This ma
 
 ## Key Mappings
 
-As noted above, CTRL is just another shift key. In addition, since the Famicom and Commodore keyboards are not identical, other key substitutions had to be made:
+CTRL is just another shift key for now, but this may change soon. For now, this means the usual Commodore CTRL key combinations are unavailable. (But many of those are for changing the text color, and that's not supported anyway.)
+
+In addition, since the Famicom and Commodore keyboards are not identical, other key substitutions had to be made:
 
 | Commodore | Famicom |
 | --- | -- |
