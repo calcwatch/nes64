@@ -9564,6 +9564,10 @@ LAB_E5FE:
     STY LAB_D0      ; input from keyboard or screen, $xx = screen,
                     ; $00 = keyboard
 
+    ;  Switch to fill mode
+    LDA     #$FF
+    STA     $5105
+
     ; make nametable visible to CPU
     LDA     #$02
     STA     $5104
@@ -9580,6 +9584,9 @@ LAB_E60F:
     LDA     #$00
     STA     $5104
 
+    ;  Switch PPU back to expansion RAM
+    LDA     #%10101010
+    STA     $5105
 
     INY             ; increment past the last non space character on line
     STY LAB_C8      ; save the input [EOL] pointer
@@ -9602,6 +9609,8 @@ LAB_E60F:
 
     BCS LAB_E65D        ; else the cursor is beyond the line end, branch always
 
+bridge_to_key_routine:
+    BEQ LAB_E5CD       ; branch always
 
 ;************************************************************************************
 ;
@@ -9614,11 +9623,14 @@ LAB_E632:
     PHA             ; save X
     LDA LAB_D0      ; input from keyboard or screen, $xx = screen,
                     ; $00 = keyboard
-    BEQ LAB_E5CD        ; if keyboard go wait for key
+    BEQ bridge_to_key_routine  ; if keyboard go wait for key
 
 LAB_E63A:
     LDY LAB_D3      ; get the cursor column
 
+    ;  Switch PPU to fill mode
+    LDA     #$FF
+    STA     $5105
     ; make nametable visible to CPU
     LDA     #$02
     STA     LAB_DF
@@ -9632,6 +9644,9 @@ LAB_E63A:
     STA     LAB_DF
     STA     $5104
 
+    ;  Switch PPU back to expansion RAM
+    LDA     #%10101010
+    STA     $5105
     LDA LAB_D7
 
     AND #$3F            ; mask key bits
@@ -9899,6 +9914,10 @@ LAB_E74C:
 
     JSR LAB_E701        ; back onto the previous line if possible
 
+    ;  Switch PPU back to fill mode
+    LDA     #$FF
+    STA     $5105
+
     ; make nametable visible to CPU
     LDA     #$02
     STA     LAB_DF
@@ -9912,6 +9931,10 @@ LAB_E759:
                     ; now close up the line
     DEY             ; decrement index to previous character
     STY LAB_D3      ; save the cursor column
+
+    ;  Switch PPU back to fill mode
+    LDA     #$FF
+    STA     $5105
 
     ; make nametable visible to CPU
     LDA     #$02
@@ -9938,7 +9961,11 @@ LAB_E773:
     STA     LAB_DF
     STA     $5104
 
-    BPL LAB_E7CB        ; branch always
+    ;  Switch PPU back to expansion RAM
+    LDA     #%10101010
+    STA     $5105
+
+    BMI LAB_E7CB        ; branch always
 
 LAB_E77E:
     LDX LAB_D4      ; get cursor quote flag, $xx = quote, $00 = no quote
@@ -10038,6 +10065,10 @@ LAB_E7EA:
 
     LDY LAB_D5      ; get current screen line length
 
+    ;  Switch PPU back to fill mode
+    LDA     #$FF
+    STA     $5105
+
     ; make nametable visible to CPU
     LDA     #$02
     STA     LAB_DF
@@ -10050,6 +10081,10 @@ LAB_E7EA:
     LDA     #$00
     STA     LAB_DF
     STA     $5104
+
+    ;  Switch PPU back to expansion RAM
+    LDA     #%10101010
+    STA     $5105
 
     PLA
     CMP #' '            ; compare the character with [SPACE]
@@ -10066,6 +10101,10 @@ LAB_E7FE:
                     ; now open up space on the line to insert a character
 LAB_E805:
     LDY LAB_D5      ; get current screen line length
+
+    ;  Switch PPU back to fill mode
+    LDA     #$FF
+    STA     $5105
 
     ; make nametable visible to CPU
     LDA     #$02
@@ -10087,6 +10126,10 @@ LAB_E80A:
     LDA     #$00
     STA     LAB_DF
     STA     $5104
+
+    ;  Switch PPU back to expansion RAM
+    LDA     #%10101010
+    STA     $5105
 
     INC LAB_D8      ; increment insert count
 LAB_E826:
@@ -10468,6 +10511,11 @@ LAB_E9C8:
     ORA LAB_0288        ; OR with screen memory page
     STA LAB_AD      ; save next/previous line pointer high byte
     LDY #(SCREEN_WIDTH-1)           ; set the column count
+
+    ;  Switch PPU back to fill mode
+    LDA     #$FF
+    STA     $5105
+
     ; make nametable visible to CPU
     LDA     #$02
     STA     LAB_DF
@@ -10484,7 +10532,10 @@ LAB_E9D4:
     LDA     #$00
     STA     LAB_DF
     STA     $5104
-    LDA     #$80 ; reset negative flag
+
+    ;  Switch PPU back to expansion RAM
+    LDA     #%10101010
+    STA     $5105
     RTS
 
 
@@ -10513,6 +10564,10 @@ LAB_E9FF:
     LDA LAB_E1          ; check if it's safe to write without switching mode
     BNE @clear_lines
 
+    ;  Switch PPU back to fill mode
+    LDA     #$FF
+    STA     $5105
+
     ; make nametable visible to CPU
     LDA     #$02
     STA     LAB_DF
@@ -10528,7 +10583,10 @@ LAB_EA07:
     LDA     #$00
     STA     LAB_DF
     STA     $5104
-    LDA     #$80 ; restore negative flag
+
+    ;  Switch PPU back to expansion RAM
+    LDA     #%10101010
+    STA     $5105
     RTS
 
 
@@ -10560,6 +10618,11 @@ LAB_EA1C:
     STA LAB_E0
     LDA LAB_E1      ; check if safe to write without changing mode
     BNE @write_char
+
+    ;  Switch PPU back to fill mode
+    LDA     #$FF
+    STA     $5105
+
     ; make nametable visible to CPU
     LDA     #$02
     STA     LAB_DF
@@ -10567,10 +10630,16 @@ LAB_EA1C:
 @write_char:
     LDA LAB_E0
     STA (LAB_D1),Y      ; save the character from current screen line
+
     ; make nametable visible to PPU
     LDA     #$00
     STA     LAB_DF
     STA     $5104
+
+    ;  Switch PPU back to expansion RAM
+    LDA     #%10101010
+    STA     $5105
+
     LDA LAB_E0
     RTS
 
@@ -10592,6 +10661,10 @@ LAB_EA31:
     LDY LAB_D3      ; get the cursor column
     LSR LAB_CF      ; shift b0 cursor blink phase into carry
 
+    ;  Switch PPU back to fill mode
+    LDA     #$FF
+    STA     $5105
+
     ; enable reading from the screen
     LDA     #$02
     STA     $5104
@@ -10599,9 +10672,13 @@ LAB_EA31:
     LDA (LAB_D1),Y      ; get the character from current screen line
     PHA
 
-    ; disable reading from the screen
+    ; Make nametable visible to PPU
     LDA     #$00
     STA     $5104
+
+    ;  Switch PPU back to expansion RAM
+    LDA     #%10101010
+    STA     $5105
 
     PLA
 
@@ -10619,11 +10696,24 @@ LAB_EA61:
     PLA             ; pull X
     TAX             ; restore X
 
+    LDA     LAB_DF  ; restore status of ExRAM visibility prior to IRQ
+    BEQ     @enable_exram_nametable
+
+    ; Switch PPU back to fill mode
+    LDA     #$FF
+    STA     $5105
+
     LDA     LAB_DF
-    STA     $5104   ; restore status of ExRAM visibility prior to IRQ
+    STA     $5104 ; restore ExRAM mode
+    BNE     @done_with_irq ; branch always
 
+@enable_exram_nametable:
+    STA     $5104 ; Make nametable visible to PPU
+    ;  Switch PPU back to expansion RAM
+    LDA     #%10101010
+    STA     $5105
+@done_with_irq:
     PLA             ; restore A
-
     RTI
 
 ;************************************************************************************
@@ -14660,10 +14750,6 @@ LAB_FCEF:
     LDA     #$01
     STA     $5103
 
-    ;       All nametables point to expansion ram
-    LDA     #%10101010
-    STA     $5105
-
     ;       Set up RAM banks
     LDA     #$00
     STA     $5113  ; PRG RAM bank 0 @ $6000-$7FFF
@@ -14677,6 +14763,14 @@ LAB_FCEF:
     LDA     #$81
     STA     $5117  ; PRG ROM bank 1 @ $E000-$FFFF
 
+
+    ;  All nametables in fill mode
+    LDA     #$FF
+    STA     $5105
+
+    LDA #' '
+    STA $5106    ; set tile for fill mode
+
     ; set palettes
     LDA $2002    ; read PPU status to reset the high/low latch to high
     LDA #$3F
@@ -14684,8 +14778,6 @@ LAB_FCEF:
     LDA #$00
     STA $2006    ; write the low byte of $3F00 address
 
-    ; Do I need to do this again?
-    LDA $2002    ; read PPU status to reset the high/low latch to high
     LDA #$00
     STA $2005    ; Set x & y scroll positions to 0
     STA $2005
@@ -14703,11 +14795,14 @@ palette_loop:
 
     LDX #$00
 
-    ; use extended ram as writeable nametable
+    ; PPU can see expansion RAM
     LDA     #$00
     STA     LAB_DF
     STA     $5104
 
+    ;  All nametables point to expansion RAM
+    LDA     #%10101010
+    STA     $5105
 
     JSR LAB_FDA3        ; initialise SID, CIA and IRQ
     JSR LAB_FD50        ; RAM test and find RAM end
