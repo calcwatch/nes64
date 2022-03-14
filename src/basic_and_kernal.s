@@ -14768,14 +14768,6 @@ LAB_FCEF:
     LDA     #$FF
     STA     $5105
 
-    ; "clear" first onboard nametable with spaces so it's less obvious when
-    ; we switch to ExRAM mode 2 while the screen is being rendered
-    LDA $2002    ; read PPU status to reset the high/low latch to high
-    LDA #$20
-    STA $2006    ; write the high byte of $3F00 address
-    LDA #$00
-    STA $2006    ; write the low byte of $3F00 address
-
     LDA #' '
     STA $5106    ; set tile for fill mode
 
