@@ -32,7 +32,7 @@ As an bonus feature, you can inspect the output of NES controllers 1 and 2 with 
 
 The 32x30 character text screen will likely get cropped when displayed on a real TV. In the future, the window size may change to avoid this problem. FCEUX has an option to display the entire screen.
 
-You'll occasionally see some flickering, especially during scrolling. This is a consequence of how the CPU and PPU share the Extended RAM (ExRAM) used for the screen. They can't both read it at the same time, so if a CPU read occurs while the screen is being rendered, the PPU will temporarily outputs blank lines. This can be greatly mitigated in the future by using the PPU's scroll registers to scroll the screen, instead of moving all the characters up one row as it does now.
+You'll occasionally see some flickering, especially during scrolling. This is a consequence of how the CPU and PPU share the Extended RAM (ExRAM) used for the screen. They can't both read it at the same time, so if a CPU read occurs while the screen is being rendered, the PPU will briefly output blank lines. This can be greatly mitigated in the future by using the PPU's scroll registers to scroll the screen, instead of moving all the characters up one row as it does now.
 
 If you're going to run NES 64 on FCEUX, please make sure you're on the latest FCEUX version. FCEUX 2.6.2 has an issue with keyboard support for shifted numbers and symbols. For example, nothing happens most of the time when pressing "shift+1" to type "!". This was fixed in 2.6.3, though some macOS keyboard issues remain. (See the [issue ticket](https://github.com/TASEmulators/fceux/issues/464) for details.)
 
