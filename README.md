@@ -18,7 +18,7 @@ NES 64 has been tested on [FCEUX](https://fceux.com/) 2.6.3 for macOS, [Nintendu
 ## Hardware Compatibility
 I've verified that it works with the [EverDrive N8 PRO Fami](https://krikzz.com/our-products/cartridges/n8-pro-fami.html) cartridge running OS v2.12. Of course, you'll also need a Family BASIC Keyboard.
 
-If you _really_ want the authentic hardware experience, you can build your own cartridge using programmable ROMs, an [MMC5](https://wiki.nesdev.org/w/index.php/MMC5) chip and 32 kB of WRAM. The usual way is to start with a [donor cartridge with appropriate specs](http://bootgod.dyndns.org:7777/search.php?keywords=5&kwtype=pcb), and swap out the ROMs. I haven't tested this approach, but I'd expect it to work. If you have any success with it, I'd love to know.
+If you _really_ want the authentic hardware experience, you can build your own cartridge using programmable ROMs, an [MMC5](https://wiki.nesdev.org/w/index.php/MMC5) chip and a WRAM chip with at least 32 kB capacity. The usual way is to start with a [donor cartridge with appropriate specs](http://bootgod.dyndns.org:7777/search.php?keywords=5&kwtype=pcb), and swap out the ROMs. I haven't tested this approach, but I'd expect it to work. If you have any success with it, I'd love to know.
 
 ## Current Status
 
