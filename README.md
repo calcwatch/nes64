@@ -12,13 +12,17 @@ First, make sure you have `make` set up on your machine, and that you have the `
 
 Then simply run `make` from the root directory. It will create a `rom/` subdirectory and put the ROM there.
 
-## Current Status
-
+## Emulator Compatibility
 NES 64 has been tested on [FCEUX](https://fceux.com/) 2.6.3 for macOS, [Nintendulator](https://www.qmtpro.com/~nes/nintendulator) 0.985 for 64bit Windows and [Mesen](https://www.mesen.ca/) 0.9.9 for Linux. It _may_ work on BizHawk as well, but I had issues with keyboard support there when I tested it on Linux.
 
-It hasn't been confirmed to work on hardware yet. To run it on hardware, you'll need [MMC5](https://wiki.nesdev.org/w/index.php/MMC5) mapper support and a Family BASIC Keybaord.
+## Hardware Compatibility
+I've verified that it works with the [EverDrive N8 PRO Fami](https://krikzz.com/our-products/cartridges/n8-pro-fami.html) cartridge running OS v2.12. Of course, you'll also need a Family BASIC Keyboard.
 
-You should be able to type and run BASIC programs, but don't expect `POKE`, `PEEK` or `SYS` calls to work as they did on the real Commodore 64. The memory and hardware layouts are totally different.
+If you _really_ want the authentic hardware experience, you can build your own cartridge using programmable ROMs, an [MMC5](https://wiki.nesdev.org/w/index.php/MMC5) chip and 32 kB of WRAM. The usual way is to start with a [donor cartridge with appropriate specs](http://bootgod.dyndns.org:7777/search.php?keywords=5&kwtype=pcb), and swap out the ROMs. I haven't tested this approach, but I'd expect it to work. If you have any success with it, I'd love to know.
+
+## Current Status
+
+You should be able to type and run BASIC programs, but don't expect `POKE`, `PEEK` or `SYS` calls to work exactly as they did on the real Commodore 64. The memory and hardware layouts are totally different.
 
 Peripherals (the datasette drive, disk drive, RS232 devices, printers, modems, etc.) are not supported.
 
